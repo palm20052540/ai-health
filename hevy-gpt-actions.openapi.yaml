@@ -1,0 +1,192 @@
+openapi: 3.1.0
+info:
+  title: AI Health and Hevy Actions
+  version: 1.0.0
+  description: Private actions for workout, training, and recovery analysis in Asia/Bangkok time.
+servers:
+  - url: https://wgolwcojpqydgtlfyjko.supabase.co/functions/v1/hevy-actions
+security:
+  - bearerAuth: []
+paths:
+  /recent-workouts:
+    get:
+      operationId: getRecentWorkouts
+      summary: Get recent completed Hevy workouts
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 20, default: 5 }
+      responses:
+        "200":
+          description: Recent workouts in Bangkok time
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /training-summary:
+    get:
+      operationId: getTrainingSummary
+      summary: Summarize workout frequency, sets, volume, duration, and common exercises
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365, default: 28 }
+      responses:
+        "200":
+          description: Aggregated training summary
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /exercise-progress:
+    get:
+      operationId: getExerciseProgress
+      summary: Get chronological progress for exercises matching a name
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 730, default: 180 }
+      responses:
+        "200":
+          description: Exercise session progression
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /recovery-comparison:
+    get:
+      operationId: compareTrainingAndRecovery
+      summary: Retrieve aligned workouts, activity, sleep, HRV, and resting-heart-rate evidence
+      description: Analyze associations only. Do not use this endpoint to make a medical diagnosis.
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 90, default: 28 }
+      responses:
+        "200":
+          description: Combined health and training evidence in Bangkok time
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /routines:
+    get:
+      operationId: listHevyRoutines
+      summary: List cached Hevy routines
+      responses:
+        "200":
+          description: Available routines
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /workouts:
+    post:
+      operationId: createHevyWorkout
+      summary: Create a completed workout in Hevy
+      description: Confirm all exercises, sets, results, and Bangkok start/end times with the user first.
+      x-openai-isConsequential: true
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          description: A new UUID for this user-approved workout creation.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkoutRequest"
+      responses:
+        "201":
+          description: Confirmed Hevy workout
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /workouts/{workoutId}:
+    put:
+      operationId: updateHevyWorkout
+      summary: Replace an existing Hevy workout
+      description: Hevy PUT replaces the workout. Retrieve and confirm complete results before updating.
+      x-openai-isConsequential: true
+      parameters:
+        - in: path
+          name: workoutId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkoutRequest"
+      responses:
+        "200":
+          description: Updated Hevy workout
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /sync:
+    post:
+      operationId: syncHevyNow
+      summary: Request an incremental Hevy synchronization
+      x-openai-isConsequential: true
+      responses:
+        "200":
+          description: Synchronization result
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    WorkoutRequest:
+      type: object
+      required: [workout]
+      properties:
+        workout:
+          type: object
+          required: [title, start_time, end_time, exercises]
+          properties:
+            title: { type: string }
+            description: { type: string }
+            start_time:
+              type: string
+              format: date-time
+              description: ISO 8601 time with +07:00 preferred.
+            end_time:
+              type: string
+              format: date-time
+              description: ISO 8601 time with +07:00 preferred.
+            is_private: { type: boolean }
+            exercises:
+              type: array
+              items:
+                type: object
+                required: [exercise_template_id, sets]
+                properties:
+                  exercise_template_id: { type: string }
+                  superset_id: { type: integer, nullable: true }
+                  notes: { type: string }
+                  sets:
+                    type: array
+                    items:
+                      type: object
+                      required: [type]
+                      properties:
+                        type:
+                          type: string
+                          enum: [normal, warmup, dropset, failure]
+                        weight_kg: { type: number, nullable: true }
+                        reps: { type: integer, nullable: true }
+                        distance_meters: { type: number, nullable: true }
+                        duration_seconds: { type: integer, nullable: true }
+                        custom_metric: { type: number, nullable: true }
+                        rpe: { type: number, minimum: 0, maximum: 10, nullable: true }
