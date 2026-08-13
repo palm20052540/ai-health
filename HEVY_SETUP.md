@@ -36,10 +36,14 @@ Verify `hevy_sync_logs`, `hevy_workouts`, `hevy_workout_exercises`, and `hevy_wo
 
 Run these only after the full import succeeds:
 
+The incremental Hevy sync runs every five minutes. This keeps the normal
+save-to-database delay low without polling Hevy's API every minute. The weekly
+full reconciliation remains enabled as a completeness check.
+
 ```sql
 select cron.schedule(
   'sync-hevy-data-every-30-minutes',
-  '*/30 * * * *',
+  '*/5 * * * *',
   $job$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name='health_project_url') || '/functions/v1/sync-hevy-data',

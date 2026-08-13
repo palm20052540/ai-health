@@ -22,6 +22,7 @@ type MetricRow = {
 type DataTypeConfig = {
   dataType: string;
   method: "list" | "rollUp" | "dailyRollUp";
+  pageSize?: number;
   maxWindowDays?: number;
   filter?: (start: Date, end: Date) => string;
   body?: (start: Date, end: Date) => Record<string, unknown>;
@@ -30,6 +31,13 @@ type DataTypeConfig = {
 const GOOGLE_HEALTH_BASE_URL = "https://health.googleapis.com/v4";
 
 const DATA_TYPES: DataTypeConfig[] = [
+  {
+    dataType: "exercise",
+    method: "list",
+    pageSize: 25,
+    filter: (start, end) =>
+      `exercise.interval.civil_start_time >= "${start.toISOString().slice(0, 19)}" AND exercise.interval.civil_start_time < "${end.toISOString().slice(0, 19)}"`,
+  },
   {
     dataType: "steps",
     method: "rollUp",
@@ -186,7 +194,43 @@ export async function syncHealthData(supabase: SupabaseClient, token: HealthToke
     recordsSynced += rows.length;
   }
 
+  recordsSynced += await syncWorkoutTelemetry(supabase, token);
+
   return recordsSynced;
+}
+
+async function syncWorkoutTelemetry(supabase: SupabaseClient, token: HealthTokenRow): Promise<number> {
+  const since = new Date(Date.now() - syncWindowDays() * 86400000).toISOString();
+  const { data: workouts, error } = await supabase.from("hevy_workouts")
+    .select("id,start_time,end_time")
+    .eq("user_id", healthUserId())
+    .is("deleted_at", null)
+    .gte("start_time", since)
+    .order("start_time");
+  if (error) throw new Error(`Failed to load workout windows: ${error.message}`);
+
+  const configs: Array<DataTypeConfig & { storedDataType: string }> = [
+    { dataType: "heart-rate", storedDataType: "workout-heart-rate", method: "rollUp", body: physicalRollupBody("60s") },
+    { dataType: "active-energy-burned", storedDataType: "workout-active-energy-burned", method: "rollUp", body: physicalRollupBody("60s") },
+    { dataType: "total-calories", storedDataType: "workout-source-reported-calories", method: "rollUp", body: physicalRollupBody("60s") },
+  ];
+  let synced = 0;
+  for (const workout of workouts || []) {
+    const start = new Date(workout.start_time);
+    const end = new Date(workout.end_time);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) continue;
+    for (const config of configs) {
+      const records = await fetchDataType(config, token.access_token, start, end);
+      const rows = records.map((value) => toMetricRow(config.storedDataType, value))
+        .filter((row): row is MetricRow => row !== null);
+      if (!rows.length) continue;
+      const { error: upsertError } = await supabase.from("health_metrics")
+        .upsert(rows, { onConflict: "user_id,data_type,recorded_at,source" });
+      if (upsertError) throw new Error(`Failed to upsert ${config.storedDataType}: ${upsertError.message}`);
+      synced += rows.length;
+    }
+  }
+  return synced;
 }
 
 async function fetchDataType(
@@ -198,7 +242,7 @@ async function fetchDataType(
   const parent = `users/me/dataTypes/${config.dataType}`;
 
   if (config.method === "list") {
-    const params = new URLSearchParams({ pageSize: "10000" });
+    const params = new URLSearchParams({ pageSize: String(config.pageSize || 10000) });
     if (config.filter) {
       params.set("filter", config.filter(start, end));
     }
@@ -281,8 +325,24 @@ function toMetricRow(dataType: string, value: Record<string, unknown>): MetricRo
     value,
     recorded_at: recordedAt,
     synced_at: new Date().toISOString(),
-    source: healthSource(),
+    source: metricSource(dataType, value),
   };
+}
+
+function metricSource(dataType: string, value: Record<string, unknown>): string {
+  const base = healthSource();
+  if (dataType !== "exercise") return base;
+
+  const dataSource = value.dataSource && typeof value.dataSource === "object"
+    ? value.dataSource as Record<string, unknown>
+    : {};
+  const application = dataSource.application && typeof dataSource.application === "object"
+    ? dataSource.application as Record<string, unknown>
+    : {};
+  const platform = typeof dataSource.platform === "string" ? dataSource.platform : "unknown";
+  const packageName = typeof application.packageName === "string" ? application.packageName : "unknown";
+  const recordId = typeof value.name === "string" ? value.name.split("/").pop() || "unknown" : "unknown";
+  return `${base}:exercise:${platform}:${packageName}:${recordId}`;
 }
 
 function extractRecordedAt(value: unknown): string | null {

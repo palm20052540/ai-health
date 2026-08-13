@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AI Health and Hevy Actions
-  version: 1.0.0
+  version: 1.2.0
   description: Private actions for workout, training, and recovery analysis in Asia/Bangkok time.
 servers:
   - url: https://wgolwcojpqydgtlfyjko.supabase.co/functions/v1/hevy-actions
@@ -21,7 +21,7 @@ paths:
           description: Recent workouts in Bangkok time
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /training-summary:
     get:
       operationId: getTrainingSummary
@@ -35,7 +35,7 @@ paths:
           description: Aggregated training summary
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /exercise-progress:
     get:
       operationId: getExerciseProgress
@@ -53,7 +53,7 @@ paths:
           description: Exercise session progression
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /recovery-comparison:
     get:
       operationId: compareTrainingAndRecovery
@@ -68,7 +68,7 @@ paths:
           description: Combined health and training evidence in Bangkok time
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /routines:
     get:
       operationId: listHevyRoutines
@@ -78,7 +78,131 @@ paths:
           description: Available routines
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+    post:
+      operationId: createHevyRoutine
+      summary: Create a reusable training routine in Hevy
+      description: Show and confirm the complete routine, exercise order, rest periods, and every planned set first.
+      x-openai-isConsequential: true
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutineRequest"
+      responses:
+        "201":
+          description: Created routine
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /routines/{routineId}:
+    get:
+      operationId: getHevyRoutineDetail
+      summary: Get a cached routine with exercises and planned sets
+      parameters:
+        - in: path
+          name: routineId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Complete routine
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+    put:
+      operationId: updateHevyRoutine
+      summary: Replace a complete Hevy routine
+      description: Retrieve the current routine, show the complete replacement, and obtain explicit confirmation first.
+      x-openai-isConsequential: true
+      parameters:
+        - in: path
+          name: routineId
+          required: true
+          schema: { type: string }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoutineRequest"
+      responses:
+        "200":
+          description: Updated routine
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /exercise-templates:
+    get:
+      operationId: searchHevyExerciseTemplates
+      summary: Search exercise templates and obtain IDs needed for workouts and routines
+      parameters:
+        - in: query
+          name: query
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Matching exercise templates
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /exercise-templates/{exerciseTemplateId}:
+    get:
+      operationId: getHevyExerciseTemplate
+      summary: Get one exercise template
+      parameters:
+        - in: path
+          name: exerciseTemplateId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Exercise template details
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /exercise-history/{exerciseTemplateId}:
+    get:
+      operationId: getHevyExerciseHistory
+      summary: Get Hevy exercise history for an exercise template
+      parameters:
+        - in: path
+          name: exerciseTemplateId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Exercise history from Hevy
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /body-measurements:
+    get:
+      operationId: getHevyBodyMeasurements
+      summary: Get cached body weight, lean mass, and body-fat measurements
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 365, default: 90 }
+      responses:
+        "200":
+          description: Body measurements in metric units
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /workouts:
     post:
       operationId: createHevyWorkout
@@ -102,8 +226,22 @@ paths:
           description: Confirmed Hevy workout
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /workouts/{workoutId}:
+    get:
+      operationId: getHevyWorkoutDetail
+      summary: Get a cached workout with every exercise and set
+      parameters:
+        - in: path
+          name: workoutId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Complete workout in Bangkok time
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
     put:
       operationId: updateHevyWorkout
       summary: Replace an existing Hevy workout
@@ -129,7 +267,23 @@ paths:
           description: Updated Hevy workout
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
+  /workouts/{workoutId}/physiology:
+    get:
+      operationId: getWorkoutPhysiology
+      summary: Get measured heart rate and calorie evidence for a completed workout
+      description: Returns workout physiology plus matched Google Health exercise evidence. Use calorie_reporting.source_reported_workout_calories_kcal as trend context when present. Do not use it for calorie-deficit calculations. Overlapping active energy is retained internally and is not returned in normal analysis. Never infer exercise-level physiology.
+      parameters:
+        - in: path
+          name: workoutId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Measured workout-level physiology and data coverage
+          content:
+            application/json:
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
   /sync:
     post:
       operationId: syncHevyNow
@@ -140,13 +294,55 @@ paths:
           description: Synchronization result
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { type: object, properties: { data: {} }, additionalProperties: true }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    RoutineRequest:
+      type: object
+      required: [routine]
+      properties:
+        routine:
+          type: object
+          required: [title, exercises]
+          properties:
+            title: { type: string }
+            folder_id: { type: integer, nullable: true }
+            notes: { type: string }
+            exercises:
+              type: array
+              items:
+                type: object
+                required: [exercise_template_id, sets]
+                properties:
+                  exercise_template_id: { type: string }
+                  rest_seconds: { type: integer, minimum: 0 }
+                  notes: { type: string }
+                  superset_id: { type: integer, nullable: true }
+                  sets:
+                    type: array
+                    items:
+                      type: object
+                      required: [type]
+                      properties:
+                        type:
+                          type: string
+                          enum: [normal, warmup, dropset, failure]
+                        weight_kg: { type: number, nullable: true }
+                        reps: { type: integer, nullable: true }
+                        rep_range:
+                          type: object
+                          nullable: true
+                          properties:
+                            start: { type: integer, nullable: true }
+                            end: { type: integer, nullable: true }
+                        distance_meters: { type: number, nullable: true }
+                        duration_seconds: { type: integer, nullable: true }
+                        custom_metric: { type: number, nullable: true }
+                        rpe: { type: number, minimum: 0, maximum: 10, nullable: true }
     WorkoutRequest:
       type: object
       required: [workout]

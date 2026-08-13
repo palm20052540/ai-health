@@ -137,15 +137,28 @@ The Edge Function has Supabase JWT verification disabled in `supabase/config.tom
 
 Initial data types:
 
+- `exercise` (session-aware workout records, including source-provided summary calories when present)
 - `steps`
 - `sleep`
 - `heart-rate`
+- `workout-heart-rate` (one-minute measured rollups only inside completed Hevy workout windows)
+- `workout-active-energy-burned` (one-minute measured rollups only inside completed Hevy workout windows)
+- `workout-source-reported-calories` (source summary captured at the workout start; used as trend context, never interpreted as a one-minute burn rate)
 - `daily-heart-rate-variability`
 - `daily-resting-heart-rate`
 - `active-zone-minutes`
 - `weight`
 
 The sync uses Google Health API v4 data type names and stores raw response objects in `health_metrics.value`.
+
+Completed Hevy workouts also receive measured-only physiology summaries in
+`workout_health_summaries`. Calculations include only source intervals fully contained within
+the workout window. The physiology endpoint also matches Google Health `exercise` sessions
+with at least 75% temporal overlap and exposes session calories only when the source record
+contains them. Source-reported workout calories are the default user-facing calorie value when
+present. Overlapping active energy remains stored internally for technical audits, is omitted
+from the normal Action response, and is not used for deficit calculations; no exercise or set
+timestamps are inferred.
 
 ## Token Refresh Flow
 
