@@ -3,6 +3,7 @@ import { BottomNav, BottomSheet, EvidenceRow, Header, MetricRow, RangeControl, S
 import { Icon } from "./icons";
 import { metricDetails } from "./data";
 import { DailyBrief } from "./DailyBrief";
+import { AssistantSyncStatus, RecoveryMorningBrief, SavedTrainingBrief } from "./SavedAssistantBrief";
 import { RecoveryCheckIn } from "./RecoveryCheckIn";
 import { buildRecoveryDecision, persistRecovery, recoveryState, sourceFreshness } from "./recoveryModel";
 import { buildLiveView } from "./healthView";
@@ -14,9 +15,9 @@ import { loadSettings, persistSettings, resetSettings } from "./settings";
 import { ExerciseListSheet, TrainingView, WorkoutTimelineSheet } from "./TrainingView";
 import { resolveTab } from "./navigation";
 
-function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, payload, settings, dataState }) {
+function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, payload, settings, dataState, briefRefreshKey }) {
   return <>
-    <DailyBrief payload={payload} settings={settings} dataState={dataState} />
+    <DailyBrief payload={payload} settings={settings} dataState={dataState} refreshKey={briefRefreshKey} />
     <section className="list-section"><h2>Health metrics</h2><p className="coverage">Detailed source measurements for the selected period.</p></section>
     <RangeControl value={range} onChange={setRange} />
     {view ? <><EvidenceRow items={view.health.evidence} onMetric={openMetric} /><TrendChart data={view.health.chart} />
@@ -27,9 +28,10 @@ function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, p
   </>;
 }
 
-function Recovery({ range, setRange, openMetric, view, recovery, onApply, applying, error, settings, openGoals }) {
+function Recovery({ range, setRange, openMetric, view, recovery, onApply, applying, error, settings, openGoals, briefRefreshKey, dataState }) {
   return <>
     <RecoveryCheckIn recovery={recovery} onApply={onApply} applying={applying} error={error} settings={settings} openGoals={openGoals} />
+    <RecoveryMorningBrief refreshKey={briefRefreshKey} enabled={dataState !== "sample"} />
     <section className="list-section"><h2>Recovery evidence</h2></section>
     <RangeControl value={range} onChange={setRange} />
     {view ? <><EvidenceRow items={view.recovery.evidence} onMetric={openMetric} /><TrendChart data={view.recovery.chart} />
@@ -48,6 +50,7 @@ function App() {
   const [ranges, setRanges] = useState({ Health: "30D", Recovery: "7D", Training: "30D" });
   const [sheet, setSheet] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [briefRefreshKey, setBriefRefreshKey] = useState(0);
   const [cache, setCache] = useState({});
   const [now, setNow] = useState(Date.now);
   const [loadStates, setLoadStates] = useState({});
@@ -127,15 +130,18 @@ function App() {
   const sync = async () => {
     if (syncRef.current) return;
     syncRef.current = true; setSyncing(true);
+    let assistantAnalysis = null;
     try {
       const result = await syncDashboard();
+      assistantAnalysis = result?.assistant_analysis;
+      setBriefRefreshKey((current) => current + 1);
       await Promise.allSettled([...requests.current.values()]);
       setCache({});
       setAppliedRecovery(null);
       await Promise.all([load(activeDays, { force: true }), load(28, { force: true })]);
-      setSheet({ type: "synced", message: syncMessage(result) });
+      setSheet({ type: "synced", message: syncMessage(result), assistantAnalysis });
     } catch (error) {
-      setSheet({ type: "sync-error", message: error instanceof Error ? error.message : "Sync could not be completed" });
+      setSheet({ type: "sync-error", message: error instanceof Error ? error.message : "Sync could not be completed", assistantAnalysis });
     } finally { syncRef.current = false; setSyncing(false); }
   };
   const recommendation = view?.training.recommendation;
@@ -148,9 +154,9 @@ function App() {
       {loadState.error ? <div className="data-note" role="status"><strong>{payload ? "Showing older cached measurements." : "Source data unavailable."}</strong> {loadState.error}</div> : null}
       {dataState === "sample" ? <div className="data-note" role="status">Sample snapshot received. Personal assessments and recommendations are withheld.</div> : null}
       <h1>{tab}</h1>
-      {tab === "Health" ? <Health range={ranges.Health} setRange={setRange} openMetric={setSheet} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} payload={payload} settings={settings} dataState={dataState} /> : null}
-      {tab === "Recovery" ? <Recovery range={ranges.Recovery} setRange={setRange} openMetric={setSheet} view={view} recovery={recovery} onApply={applyRecovery} applying={applyingRecovery} error={recoveryError} settings={settings} openGoals={() => setSheet({ type: "setting", section: "goals" })} /> : null}
-      {tab === "Training" ? <TrainingView range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /> : null}
+      {tab === "Health" ? <Health range={ranges.Health} setRange={setRange} openMetric={setSheet} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} payload={payload} settings={settings} dataState={dataState} briefRefreshKey={briefRefreshKey} /> : null}
+      {tab === "Recovery" ? <Recovery range={ranges.Recovery} setRange={setRange} openMetric={setSheet} view={view} recovery={recovery} onApply={applyRecovery} applying={applyingRecovery} error={recoveryError} settings={settings} openGoals={() => setSheet({ type: "setting", section: "goals" })} briefRefreshKey={briefRefreshKey} dataState={dataState} /> : null}
+      {tab === "Training" ? <><SavedTrainingBrief refreshKey={briefRefreshKey} enabled={dataState !== "sample"} /><TrainingView range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /></> : null}
       <SourceStatus payload={payload} />
     </main>
     <BottomNav active={tab} onChange={selectTab} />
@@ -164,8 +170,8 @@ function App() {
     {sheet?.type === "exercise-list" ? <ExerciseListSheet exerciseGroups={sheet.exerciseGroups} initialMuscles={sheet.initialMuscles} activeMuscles={sheet.activeMuscles} onMuscleChange={(activeMuscles) => setSheet({ ...sheet, activeMuscles })} onExercise={(exercise) => setSheet({ type: "exercise", exercise, returnTo: sheet })} onClose={() => setSheet(null)} /> : null}
     {sheet?.type === "timeline" ? <WorkoutTimelineSheet workouts={sheet.workouts} recommendation={recommendation} onWorkout={(workout) => setSheet({ type: "workout", workout, returnTo: sheet })} onReview={() => setSheet({ type: "recommendation", returnTo: sheet })} onClose={() => setSheet(null)} /> : null}
     {sheet?.type === "recommendation" ? <RoutineRecommendationSheet recommendation={recommendation || { exercise: "No recommendation", load: null, reps: "—", targetRpe: settings.training.targetRpe, currentLoad: null, explanation: "Current source data is unavailable." }} onClose={() => setSheet(sheet.returnTo || null)} /> : null}
-    {sheet?.type === "synced" ? <BottomSheet title="Data is current" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
-    {sheet?.type === "sync-error" ? <BottomSheet title="Sync needs attention" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
+    {sheet?.type === "synced" ? <BottomSheet title="Sync result" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><AssistantSyncStatus analysis={sheet.assistantAnalysis} /><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
+    {sheet?.type === "sync-error" ? <BottomSheet title="Sync needs attention" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><AssistantSyncStatus analysis={sheet.assistantAnalysis} /><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
   </div>;
 }
 

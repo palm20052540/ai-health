@@ -184,7 +184,7 @@ test("matching concurrent model requests share one call", async () => {
 test("health-brief and compatible coach routes work with no health upstream configuration", async () => {
   for (const path of ["/api/health-brief", "/api/coach"]) {
     const response = await worker.fetch(post(path, { snapshot: { dataState: "sample" } }), {});
-    assert.equal(response.status, 200); assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.equal(response.status, 200); assert.equal(response.headers.get("Cache-Control"), "private, no-store");
     const result = await response.json(); assert.equal(result.configured, false); assert.equal(result.mode, "unavailable");
     if (path === "/api/coach") { assert.ok(result.coach.evidence.length); assert.ok(result.coach.action.title); }
   }
@@ -251,7 +251,7 @@ test("a newly recorded partial step day cannot refresh stale complete-day averag
 });
 
 
-test("HTTP model routes fail closed when a key exists without an allowed-user gate", async () => {
+test("legacy HTTP routes never call a paid model even when a key is present", async () => {
   const previous = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => { calls++; assert.fail("No paid or health endpoint call is permitted"); };
@@ -259,8 +259,8 @@ test("HTTP model routes fail closed when a key exists without an allowed-user ga
     for (const path of ["/api/health-brief", "/api/coach"]) {
       const response = await worker.fetch(post(path, { snapshot: snapshot() }), syntheticEnv);
       const result = await response.json();
-      assert.equal(response.status, 200); assert.equal(result.configured, true);
-      assert.equal(result.reason, "authorization_not_configured"); assert.notEqual(result.mode, "model");
+      assert.equal(response.status, 200); assert.equal(result.configured, false);
+      assert.notEqual(result.mode, "model");
     }
     assert.equal(calls, 0);
   } finally { globalThis.fetch = previous; }

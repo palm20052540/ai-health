@@ -15,7 +15,8 @@
     "sync:refresh": "deno run --allow-env --allow-net scripts/sync-health-data.ts --refresh-only",
     "test": "node --test tests/*.test.js",
     "lint:analytics": "deno lint --no-config supabase/functions/hevy-actions/analytics.ts",
-    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/components.jsx src/SettingsSheets.jsx src/dates.js src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts"
+    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/components.jsx src/SettingsSheets.jsx src/dates.js src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts src/assistantReports.js src/SavedAssistantBrief.jsx worker/briefStore.js worker/briefMcp.js",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "react": "19.1.1",
@@ -26,6 +27,8 @@
     "@openai/sites-vite-plugin": "0.2.0",
     "@supabase/supabase-js": "2.110.2",
     "deno": "2.9.2",
+    "drizzle-kit": "0.31.10",
+    "drizzle-orm": "0.45.2",
     "supabase": "2.109.1",
     "vite": "8.0.16",
     "wrangler": "4.137.0"

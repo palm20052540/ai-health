@@ -51,11 +51,15 @@ export function syncMessage(payload) {
   const entries = Object.entries(results);
   if (!entries.length) return "No data sources were checked.";
   const synced = entries.filter(([, result]) => result?.status === "synced").map(([source]) => source);
-  const current = entries.filter(([, result]) => ["fresh", "cooldown_active", "sync_in_progress"].includes(result?.status)).map(([source]) => source);
+  const current = entries.filter(([, result]) => result?.status === "fresh").map(([source]) => source);
+  const pending = entries.filter(([, result]) => result?.status === "sync_in_progress").map(([source]) => source);
+  const cooldown = entries.filter(([, result]) => result?.status === "cooldown_active").map(([source]) => source);
   const failed = entries.filter(([, result]) => result?.status === "partial_failure").map(([source]) => source);
   const parts = [];
   if (synced.length) parts.push(`${synced.join(" and ")} updated`);
   if (current.length) parts.push(`${current.join(" and ")} already current`);
+  if (pending.length) parts.push(`${pending.join(" and ")} sync is still in progress; new data is not confirmed yet`);
+  if (cooldown.length) parts.push(`${cooldown.join(" and ")} is in a refresh cooldown; a new sync was not run`);
   if (failed.length) parts.push(`${failed.join(" and ")} could not update`);
   return `${parts.join("; ") || "Freshness check completed"}.`;
 }

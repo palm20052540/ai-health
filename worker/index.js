@@ -1,8 +1,10 @@
 import { generateHealthBrief, readBoundedJson, toLegacyCoach } from "./dailyBrief.js";
+import { briefPrincipal, handleBriefMcp } from "./briefMcp.js";
+import { readSavedReport } from "./briefStore.js";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
-  "Cache-Control": "no-store",
+  "Cache-Control": "private, no-store",
 };
 
 function json(body, status = 200) {
@@ -53,13 +55,27 @@ async function upstream(env, path, init = {}) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const readDashboard = (days) => { requireConfig(env); return upstream(env, `/v1/portal-dashboard?days=${days}`); };
+    if (url.pathname === "/mcp") return handleBriefMcp(request, env, {
+      readDashboard,
+      refreshDailySources: async () => {
+        requireConfig(env);
+        const refreshed = await upstream(env, "/v1/sync-missing-data", { method: "POST", body: JSON.stringify({ sources: ["google_health"] }) });
+        return { source: "google_health", status: refreshed?.results?.google_health?.status || "unknown", checkedAt: new Date().toISOString(), message: "Read current brief evidence next. In-progress or failed sync is not a fresh completed update." };
+      },
+    });
     if (!url.pathname.startsWith("/api/")) return serveApp(request, env);
     if (!authorizeSiteVisitor(request, env)) return json({ error: "Forbidden" }, 403);
 
     try {
+      if (request.method === "GET" && url.pathname === "/api/assistant-briefs") {
+        const ownerId = briefPrincipal(request, env);
+        return json(await readSavedReport(env, ownerId, url.searchParams.get("kind"), readDashboard));
+      }
       if (request.method === "POST" && ["/api/health-brief", "/api/coach"].includes(url.pathname)) {
         const body = await readBoundedJson(request);
-        const result = await generateHealthBrief(env, body.snapshot, { authorized: Boolean(typeof env.ALLOWED_USER_EMAIL === "string" && env.ALLOWED_USER_EMAIL.trim()), scope: request.headers.get("oai-authenticated-user-email") || env.ALLOWED_USER_EMAIL });
+        // Legacy clients receive rules only. This Site never makes paid model calls.
+        const result = await generateHealthBrief({}, body.snapshot);
         return json(url.pathname === "/api/coach" ? toLegacyCoach(result) : result);
       }
       const healthRoutes = ["/api/dashboard", "/api/sync", "/api/status", "/api/routines"];
@@ -72,10 +88,11 @@ export default {
       if (request.method === "POST" && url.pathname === "/api/sync") {
         const body = await request.json().catch(() => ({}));
         const sources = Array.isArray(body.sources) ? body.sources : ["hevy", "google_health"];
-        return json(await upstream(env, "/v1/sync-missing-data", {
+        const result = await upstream(env, "/v1/sync-missing-data", {
           method: "POST",
           body: JSON.stringify({ sources }),
-        }));
+        });
+        return json({ ...result, assistant_analysis: { status: "blocked", message: "Source sync completed its request. Automatic Training analysis is not connected yet; no assistant run was started. A saved summary is checked against the updated source evidence." } });
       }
       if (request.method === "GET" && url.pathname === "/api/status") {
         return json(await upstream(env, "/v1/data-freshness"));
@@ -106,7 +123,7 @@ export default {
       return json({ error: "Not found" }, 404);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unexpected error";
-      return json({ error: message }, [400, 413].includes(error?.status) ? error.status : message.includes("configuration") ? 503 : 502);
+      return json({ error: message }, [400, 401, 403, 409, 413, 503].includes(error?.status) ? error.status : message.includes("configuration") ? 503 : 502);
     }
   },
 };
