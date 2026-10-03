@@ -8,6 +8,78 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /v1/daily-state:
+    get:
+      operationId: getDailyHealthState
+      summary: Get a compact health and workout state for one Bangkok date
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+          description: Defaults to today in Asia/Bangkok.
+      responses:
+        "200":
+          description: Compact daily health state with freshness and coverage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompactHealthResponse" }
+  /v1/health-recap:
+    get:
+      operationId: getCompactHealthRecap
+      summary: Get a compact recovery, sleep, activity, and training recap
+      description: Prefer this endpoint for 7-90 day recaps. It returns aggregates rather than raw measurements.
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 90, default: 28 }
+      responses:
+        "200":
+          description: Compact recap designed to stay within GPT Action payload limits
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompactHealthResponse" }
+  /v1/workout-progress:
+    get:
+      operationId: getCompactWorkoutProgress
+      summary: Get aggregate training progress or progress for one exercise
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365, default: 28 }
+        - in: query
+          name: exercise
+          schema: { type: string }
+          description: Optional exercise-name search. Omit for overall training progress.
+      responses:
+        "200":
+          description: Workout progress summary
+          content:
+            application/json:
+              schema: { type: object, properties: { schema_version: { type: string }, generated_at: { type: string, format: date-time }, timezone: { type: string }, period: { type: object, additionalProperties: true }, freshness: { type: object, additionalProperties: true }, coverage: { type: object, additionalProperties: true }, summary: { type: object, additionalProperties: true }, evidence: {}, data_quality: { type: object, additionalProperties: true } }, additionalProperties: true }
+  /v1/data-freshness:
+    get:
+      operationId: checkHealthDataFreshness
+      summary: Check the newest available Hevy and Google Health data
+      responses:
+        "200":
+          description: Per-source data freshness
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CompactHealthResponse" }
+  /v1/portal-dashboard:
+    get:
+      operationId: getPortalDashboard
+      summary: Get the private portal dashboard payload in one cached-data request
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+      responses:
+        "200":
+          description: Health recap, exercise progress, recent workouts, and body measurements
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
   /recent-workouts:
     get:
       operationId: getRecentWorkouts
@@ -272,7 +344,7 @@ paths:
     get:
       operationId: getWorkoutPhysiology
       summary: Get measured heart rate and calorie evidence for a completed workout
-      description: Returns workout physiology plus matched Google Health exercise evidence. Use calorie_reporting.source_reported_workout_calories_kcal as trend context when present. Do not use it for calorie-deficit calculations. Overlapping active energy is retained internally and is not returned in normal analysis. Never infer exercise-level physiology.
+      description: Returns workout physiology plus matched Google Health exercise evidence. Use source-reported workout calories as trend context only, never for calorie-deficit calculations. Never infer exercise-level physiology.
       parameters:
         - in: path
           name: workoutId
@@ -301,6 +373,19 @@ components:
       type: http
       scheme: bearer
   schemas:
+    CompactHealthResponse:
+      type: object
+      required: [schema_version, generated_at, timezone, period, freshness, coverage, summary, data_quality]
+      properties:
+        schema_version: { type: string }
+        generated_at: { type: string, format: date-time }
+        timezone: { type: string }
+        period: { type: object, additionalProperties: true }
+        freshness: { type: object, additionalProperties: true }
+        coverage: { type: object, additionalProperties: true }
+        summary: { type: object, additionalProperties: true }
+        evidence: {}
+        data_quality: { type: object, additionalProperties: true }
     RoutineRequest:
       type: object
       required: [routine]

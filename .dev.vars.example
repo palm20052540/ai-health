@@ -1,0 +1,3 @@
+AI_HEALTH_API_URL=https://your-project-ref.supabase.co/functions/v1/hevy-actions
+AI_HEALTH_PLUGIN_API_KEY=replace-with-a-separate-site-proxy-key
+ALLOWED_USER_EMAIL=you@example.com

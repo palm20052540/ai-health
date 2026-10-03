@@ -133,6 +133,33 @@ select vault.create_secret('your-sync-shared-secret', 'health_sync_shared_secret
 
 The Edge Function has Supabase JWT verification disabled in `supabase/config.toml` and validates `Authorization: Bearer ${SYNC_SHARED_SECRET}` itself.
 
+## AI Health Plugin And Custom GPT
+
+The Custom GPT and personal Codex plugin run side by side against the same `hevy-actions` Edge Function. Legacy GPT Action routes remain available, while compact `/v1` routes return aggregate evidence with freshness and coverage metadata:
+
+- `GET /v1/daily-state`
+- `GET /v1/health-recap?days=28`
+- `GET /v1/workout-progress?days=28`
+- `GET /v1/data-freshness`
+- `GET /v1/portal-dashboard?days=30` (single-request payload for the personal portal)
+- `POST /v1/sync-missing-data` (Codex plugin key only)
+
+The personal plugin lives at `C:\Users\ASUS\plugins\ai-health`. It reads `AI_HEALTH_API_URL` and `AI_HEALTH_PLUGIN_API_KEY` from the user environment and never receives the Supabase service-role key. The sync tool uses a 15-minute per-source cooldown and an atomic database guard, so repeated calls do not repeatedly hit Hevy or Google Health.
+
+## Tong Fit portal and GPT Sites
+
+The mobile-first React portal uses a same-origin Worker proxy, so its API credential is never shipped to the browser. In Supabase, configure a dedicated `AI_HEALTH_SITE_API_KEY`; in GPT Sites, store that same value under the Worker's `AI_HEALTH_PLUGIN_API_KEY` binding. This keeps the Site credential separate from the Codex plugin credential. The portal requests one cached dashboard payload per selected range and only calls `/v1/sync-missing-data` when the user taps **Sync now**.
+
+For local development, copy `.dev.vars.example` to `.dev.vars` or provide the same values through process environment variables. For GPT Sites, add these hosted secrets in the Site settings before deployment:
+
+- `AI_HEALTH_API_URL`
+- `AI_HEALTH_PLUGIN_API_KEY`
+- `ALLOWED_USER_EMAIL` (recommended defense in depth; use the email that opens the private Site)
+
+Run `npm run build` to create the GPT Sites-compatible Worker and client bundle. The official Sites packaging metadata is generated at `dist/.openai/hosting.json`. Keep the Site audience owner-only.
+
+For 28-day Custom GPT recaps, prefer `getCompactHealthRecap` from `hevy-gpt-actions.openapi.yaml`. The legacy `compareTrainingAndRecovery` operation remains available for rollback but returns raw records and is not intended for routine recaps.
+
 ## Synced Data Types
 
 Initial data types:

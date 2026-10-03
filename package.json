@@ -3,14 +3,27 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "prebuild": "node scripts/clean-dist.mjs",
+    "build": "vite build",
+    "postbuild": "node scripts/sanitize-dist.mjs && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
     "supabase": "supabase",
-    "check": "deno check supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
+    "check": "deno check supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts supabase/functions/hevy-actions/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
     "oauth:url": "deno run --allow-env scripts/google-oauth-url.ts",
     "sync": "deno run --allow-env --allow-net scripts/sync-health-data.ts",
     "sync:refresh": "deno run --allow-env --allow-net scripts/sync-health-data.ts --refresh-only"
   },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.58.0",
+    "@openai/sites-vite-plugin": "0.2.0",
     "deno": "2.9.2",
-    "supabase": "2.109.1"
+    "supabase": "2.109.1",
+    "vite": "8.0.16",
+    "wrangler": "4.137.0"
   }
 }

@@ -3,6 +3,26 @@ import { assertSharedSecret, jsonResponse } from "../_shared/http.ts";
 import { getUsableToken, syncHealthData } from "../_shared/health_api.ts";
 import { createAdminClient } from "../_shared/supabase.ts";
 
+function bangkokDate(daysAgo: number): string {
+  const date = new Date(Date.now() - daysAgo * 86400000);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+async function refreshActivityRollups(supabase: ReturnType<typeof createAdminClient>, userId: string): Promise<void> {
+  const results = await Promise.all(Array.from({ length: 7 }, (_, daysAgo) =>
+    supabase.rpc("refresh_health_activity_daily_rollup", {
+      p_user_id: userId,
+      p_activity_date: bangkokDate(daysAgo),
+    })
+  ));
+  const error = results.find((result) => result.error)?.error;
+  if (error) throw new Error(`Failed to refresh activity rollups: ${error.message}`);
+}
+
 Deno.serve(async (req) => {
   let recordsSynced = 0;
   const userId = healthUserId();
@@ -21,6 +41,7 @@ Deno.serve(async (req) => {
 
     if (!refreshOnly) {
       recordsSynced = await syncHealthData(supabase, token);
+      await refreshActivityRollups(supabase, userId);
     }
 
     const { error: logError } = await supabase.from("sync_logs").insert({
@@ -64,4 +85,3 @@ Deno.serve(async (req) => {
     }, 500);
   }
 });
-

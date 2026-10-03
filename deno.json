@@ -1,7 +1,7 @@
 {
   "nodeModulesDir": "auto",
   "tasks": {
-    "check": "deno check supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
+    "check": "deno check supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts supabase/functions/hevy-actions/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
     "oauth:url": "deno run --allow-env scripts/google-oauth-url.ts",
     "sync": "deno run --allow-env --allow-net scripts/sync-health-data.ts",
     "sync:refresh": "deno run --allow-env --allow-net scripts/sync-health-data.ts --refresh-only"
