@@ -3,6 +3,8 @@
 > Canonical product and engineering reference for the Tong Fit AI Health Portal.
 >
 > Last verified: 3 October 2026 (Asia/Bangkok)
+>
+> Branch status: cloud-only Coach visibility change; not deployed. See section 18 for verification limits.
 
 ## 1. Product Summary
 
@@ -29,7 +31,7 @@ Tong Fit provides wellness and training guidance. It is not a medical device and
 
 ## 2. Current Product Surface
 
-The portal has four bottom-navigation tabs.
+This branch exposes three bottom-navigation tabs: Health, Recovery, and Training. Coach is temporarily hidden. Old `?tab=Coach` links and saved Coach selections open Recovery; unsupported tab names also fall back to Recovery. The selected supported tab is persisted so stale Coach state is repaired.
 
 ### Health
 
@@ -59,7 +61,11 @@ The portal has four bottom-navigation tabs.
 - Charts show only dates with recorded sessions
 - Combined muscle selections deduplicate workouts when calculating aggregate volume and frequency
 
-### Coach
+### Coach (temporarily hidden)
+
+Coach is not rendered or listed in bottom navigation on this branch. The frontend does not request `/api/coach`. The existing Coach component, API helper, and Worker route are retained for a reversible restoration; this change does not delete backend functionality.
+
+Retained implementation:
 
 - Adaptive daily brief combining Health, Recovery, and Training
 - Ranked cross-signal priorities
@@ -68,7 +74,7 @@ The portal has four bottom-navigation tabs.
 - Link into the next-session recommendation flow
 - Wellness disclaimer
 
-Coach currently has two operating modes:
+The retained Coach implementation supports two operating modes:
 
 1. **Evidence Engine** — deterministic reasoning from live aggregate data; always available.
 2. **Model-generated mode** — optional OpenAI Responses API output; enabled only when `OPENAI_API_KEY` is configured on the Site.
@@ -173,7 +179,9 @@ One compact dashboard request per range is preferred over many widget-level quer
 
 Do not sync Hevy or Google Health on every page load. Synchronization is manual or scheduled so repeated browsing does not waste Supabase or external API usage.
 
-### Coach generation
+### Coach generation (paused in the UI)
+
+The current frontend does not run this flow while Coach is hidden. The retained flow for a future authorized restoration is:
 
 1. The frontend builds a small aggregate snapshot from the current live view.
 2. It calls `POST /api/coach`.
@@ -396,6 +404,7 @@ http://127.0.0.1:5173/
 ### Required checks
 
 ```powershell
+node --test tests/navigation.test.js
 npm run check
 npm run build
 git diff --check
@@ -416,7 +425,8 @@ Before publishing a visible change, verify:
 - Correct production or local URL and page title
 - Meaningful content renders; no framework error overlay
 - No relevant console warnings or errors
-- Health, Recovery, Training, and Coach navigation
+- Health, Recovery, and Training navigation; Coach must remain hidden
+- Old Coach links, saved Coach state, and unknown tabs fall back to Recovery
 - At least one interaction affected by the change
 - Live-data, loading, error, empty, and fallback behavior as applicable
 - Mobile layout, fixed bottom navigation, sheets, focus, and scrolling
@@ -497,8 +507,8 @@ First recovery step: reopen or refresh the Site with an active ChatGPT session. 
 ## 16. Near-Term Roadmap
 
 1. Stabilize GPT Sites private-session authentication for `/api/*` requests.
-2. Configure the OpenAI API key through the approved Site secret flow.
-3. Validate model-generated Coach output against the Evidence Engine.
+2. Keep Coach hidden until its product direction and model setup are approved.
+3. If Coach is restored, configure its key through the approved Site secret flow and validate model-generated output against the Evidence Engine.
 4. Add recommendation outcome tracking: suggested action → performed action → result.
 5. Add weekly review and progress forecasting with explicit confidence bands.
 6. Add physique-photo comparison with conservative, non-diagnostic language.
@@ -517,3 +527,26 @@ A change is complete only when:
 - Production is deployed when the request changes the Site.
 - This master document is updated when architecture, environment keys, routes, major features, or operational constraints change.
 
+
+## 18. Cloud-Only Verification — 3 October 2026
+
+This isolated change was prepared on the assistant cloud computer from `agent/add-hevy-integration` at `03efc5012e4a7fa90aad5b92f8c47d13c9e09a02`. The 52 materialized source files were verified against their GitHub blob hashes before editing. Design image assets and environment examples were not needed for this local build and were not copied; existing repository files are preserved by the branch change.
+
+Changes:
+
+- Hide Coach from the UI while preserving its unused component and server route.
+- Centralize the three visible tabs in `src/navigation.js` and normalize unsupported URL/saved tabs to Recovery.
+- Use equal-width automatic navigation columns and stop the frontend Coach-generation effect.
+- Add five dependency-free navigation regression tests.
+
+Verification in the cloud:
+
+- `node --test tests/navigation.test.js`: passed, 5 tests.
+- `npm run build`: passed, including Worker, React client, secret-output sanitation, and Sites server packaging.
+- Actual React server rendering: passed 6 URL/saved-tab scenarios, each with 3 navigation buttons and no Coach.
+- `git diff --check`: passed.
+- `npm run check`: attempted; Deno dependency downloads did not complete in this environment within the bounded retry. The aggregate Deno type check is unverified, not passed.
+- Browser QA: blocked before page load because isolated Chromium could not create its Unix socket (`Operation not permitted`). The dedicated cloud browser also blocked the loopback preview URL (`ERR_BLOCKED_BY_CLIENT`). Interactive behavior and visual layout still require browser verification.
+- Credential-pattern scan of source files: no matching private-key/token patterns found. No real `.env`, runtime credentials, health records, or model calls were used for this proof.
+
+This verifies cloud source access, code editing, focused regression checks, and production build execution without the user's PC. It does not verify live health APIs or production behavior. No merge or deployment is included. Before release, complete the aggregate type check and browser QA against this exact branch.

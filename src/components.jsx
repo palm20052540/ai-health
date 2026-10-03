@@ -1,3 +1,4 @@
+import { VISIBLE_TABS } from "./navigation";
 import React, { useEffect, useId, useRef } from "react";
 import { Icon } from "./icons";
 
@@ -98,8 +99,7 @@ export function Sparkline({ values, color = "#146BFA" }) {
 }
 
 export function BottomNav({ active, onChange }) {
-  const tabs = [{ label: "Health", icon: "health" }, { label: "Recovery", icon: "recovery" }, { label: "Training", icon: "training" }, { label: "Coach", icon: "coach" }];
-  return <nav className="bottom-nav" aria-label="Primary navigation">{tabs.map((tab) => (
+  return <nav className="bottom-nav" aria-label="Primary navigation">{VISIBLE_TABS.map((tab) => (
     <button key={tab.label} aria-current={active === tab.label ? "page" : undefined} className={active === tab.label ? "active" : ""} onClick={() => onChange(tab.label)}>
       <Icon name={tab.icon} size={25} /><span>{tab.label}</span>
     </button>

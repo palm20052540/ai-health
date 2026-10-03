@@ -3,13 +3,13 @@ import { BottomNav, BottomSheet, EvidenceRow, Header, Insight, MetricRow, RangeC
 import { Icon } from "./icons";
 import { chartSeries, healthMetrics, metricDetails, recoveryDrivers } from "./data";
 import { buildLiveView } from "./healthView";
-import { daysForRange, fetchCoach, fetchDashboard, formatGeneratedAt, syncDashboard, syncMessage } from "./portalData";
+import { daysForRange, fetchDashboard, formatGeneratedAt, syncDashboard, syncMessage } from "./portalData";
 import { ExerciseDetailSheet, MuscleDetailSheet, PostWorkoutSheet, RoutineRecommendationSheet } from "./DetailSheets";
 import { PhotoSheet } from "./PhotoSheet";
 import { SettingEditor, SettingsMenu } from "./SettingsSheets";
 import { loadSettings, persistSettings, resetSettings } from "./settings";
 import { ExerciseListSheet, TrainingView, WorkoutTimelineSheet } from "./TrainingView";
-import { CoachView } from "./CoachView";
+import { resolveTab } from "./navigation";
 
 const insightCopy = {
   Health: { title: "Your baseline is stable. Activity is trending up without extra cardiovascular strain.", copy: "Resting heart rate stayed typical while steps increased across the last four weeks." },
@@ -54,14 +54,13 @@ function Recovery({ range, setRange, openMetric, view }) {
 }
 
 function App() {
-  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || localStorage.getItem("tong-fit:last-tab") || "Recovery");
+  const [tab, setTab] = useState(() => resolveTab(new URLSearchParams(window.location.search).get("tab"), localStorage.getItem("tong-fit:last-tab")));
   const [settings, setSettings] = useState(() => loadSettings());
-  const [ranges, setRanges] = useState({ Health: "30D", Recovery: "7D", Training: "30D", Coach: "7D" });
+  const [ranges, setRanges] = useState({ Health: "30D", Recovery: "7D", Training: "30D" });
   const [sheet, setSheet] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [cache, setCache] = useState({});
   const [loadState, setLoadState] = useState({ status: "loading", error: null });
-  const [coachState, setCoachState] = useState({ mode: "rules", coach: null });
   const activeDays = daysForRange(ranges[tab]);
   const payload = cache[activeDays];
   const view = useMemo(() => payload ? buildLiveView(payload, settings) : null, [payload, settings]);
@@ -80,27 +79,10 @@ function App() {
   };
 
   useEffect(() => { load(activeDays); }, [activeDays]);
-  useEffect(() => {
-    if (tab !== "Coach" || !view) return;
-    const controller = new AbortController();
-    const snapshot = {
-      generatedAt: view.lastSynced,
-      coverage: view.coverage,
-      health: view.insights.Health,
-      recovery: view.insights.Recovery,
-      training: view.insights.Training,
-      recommendation: view.training.recommendation,
-      recentWorkoutCount: view.training.recentWorkouts?.length || 0,
-      preferences: { targetRpe: settings.training.targetRpe, maxRpe: settings.training.maxRpe, goal: settings.goals.primaryGoal },
-    };
-    fetchCoach(snapshot, controller.signal)
-      .then((result) => setCoachState({ mode: result.mode || "rules", coach: result.coach || null }))
-      .catch(() => setCoachState({ mode: "rules", coach: null }));
-    return () => controller.abort();
-  }, [tab, view, settings]);
+  useEffect(() => { localStorage.setItem("tong-fit:last-tab", tab); }, [tab]);
 
   const selectTab = (next) => {
-    setTab(next); localStorage.setItem("tong-fit:last-tab", next);
+    setTab(resolveTab(next));
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
   };
   const setRange = (range) => setRanges((current) => ({ ...current, [tab]: range }));
@@ -139,7 +121,6 @@ function App() {
       {tab === "Health" ? <Health range={ranges.Health} setRange={setRange} openMetric={setSheet} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} /> : null}
       {tab === "Recovery" ? <Recovery range={ranges.Recovery} setRange={setRange} openMetric={setSheet} view={view} /> : null}
       {tab === "Training" ? <TrainingView range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} /> : null}
-      {tab === "Coach" ? <CoachView view={view} settings={settings} generatedCoach={coachState.coach} coachMode={coachState.mode} onReviewPlan={() => setSheet({ type: "recommendation" })} /> : null}
     </main>
     <BottomNav active={tab} onChange={selectTab} />
     {metric ? <BottomSheet title={metric.title} onClose={() => setSheet(null)}><p className="sheet-lead">{metric.body}</p><div className="method-block"><strong>How it’s calculated</strong><p>{metric.method}</p></div><p className="coverage">{view ? `Coverage: ${view.coverage.activity_complete_days || 0} activity days · ${view.coverage.sleep_nights || 0} sleep nights` : "Coverage: 27 of 30 days · Sample data"}</p></BottomSheet> : null}

@@ -99,7 +99,7 @@ h2 { margin: 0; font-size: 18px; letter-spacing: -.3px; }
 .recent-workout > button { width: 100%; display: grid; grid-template-columns: 1fr auto 15px; gap: 10px; border: 0; background: transparent; text-align: left; padding: 12px 0; cursor: pointer; }
 .recent-workout > button span strong, .recent-workout > button span small { display: block; }.recent-workout > button span strong { font-size: 13px; }.recent-workout > button span small { color: var(--muted); font-size: 10px; margin-top: 3px; }.recent-workout > button span:nth-child(2) { text-align: right; }
 
-.bottom-nav { position: fixed; z-index: 20; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 440px); display: grid; grid-template-columns: repeat(4, 1fr); background: rgba(255,255,255,.97); border-top: 1px solid var(--line); padding: 9px 10px calc(9px + env(safe-area-inset-bottom)); backdrop-filter: blur(14px); }
+.bottom-nav { position: fixed; z-index: 20; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 440px); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255,255,255,.97); border-top: 1px solid var(--line); padding: 9px 10px calc(9px + env(safe-area-inset-bottom)); backdrop-filter: blur(14px); }
 .bottom-nav button { display: grid; place-items: center; gap: 4px; border: 0; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; padding: 4px; }
 .bottom-nav button.active { color: var(--blue); font-weight: 700; }
 
