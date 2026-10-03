@@ -1054,6 +1054,7 @@
       "dependencies": [
         "npm:@cloudflare/vite-plugin@1.58.0",
         "npm:@openai/sites-vite-plugin@0.2.0",
+        "npm:@supabase/supabase-js@2.110.2",
         "npm:deno@2.9.2",
         "npm:react-dom@19.1.1",
         "npm:react@19.1.1",

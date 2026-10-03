@@ -1,3 +1,4 @@
+import { sourceInstant } from "./dates.js";
 import React from "react";
 import { BottomSheet, Sparkline } from "./components";
 import { Icon } from "./icons";
@@ -8,7 +9,9 @@ function value(input, fallback = "—") {
 }
 function shortDate(input) {
   if (!input) return "—";
-  const date = new Date(String(input).length === 10 ? `${input}T00:00:00+07:00` : input);
+  const instant = sourceInstant(input);
+  if (!instant) return "—";
+  const date = new Date(instant);
   if (!Number.isFinite(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en", { timeZone: "Asia/Bangkok", month: "short", day: "numeric" }).format(date);
 }
@@ -63,7 +66,7 @@ export function PostWorkoutSheet({ workout, settings, onClose }) {
   const effort = rpeCoverage(workout);
   const target = finiteNumber(settings?.training?.targetRpe) ?? 8;
   const cap = finiteNumber(settings?.training?.maxRpe) ?? 9;
-  const start = sessionDate(workout), end = workout?.end_time_bangkok || workout?.end_time;
+  const start = sessionDate(workout), end = sourceInstant(workout?.end_time || workout?.end_time_bangkok);
   const difference = start && end ? (new Date(end) - new Date(start)) / 60000 : null;
   const duration = difference != null && Number.isFinite(difference) ? Math.max(0, Math.round(difference)) : null;
   const completeEffort = effort.average != null && effort.percent != null && effort.percent >= 80;

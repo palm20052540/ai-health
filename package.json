@@ -9,13 +9,13 @@
     "postbuild": "node scripts/sanitize-dist.mjs && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
     "supabase": "supabase",
-    "check": "deno check supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts supabase/functions/hevy-actions/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
+    "check": "deno check --node-modules-dir=manual supabase/functions/oauth-callback/index.ts supabase/functions/sync-health-data/index.ts supabase/functions/hevy-actions/index.ts scripts/sync-health-data.ts scripts/google-oauth-url.ts",
     "oauth:url": "deno run --allow-env scripts/google-oauth-url.ts",
     "sync": "deno run --allow-env --allow-net scripts/sync-health-data.ts",
     "sync:refresh": "deno run --allow-env --allow-net scripts/sync-health-data.ts --refresh-only",
     "test": "node --test tests/*.test.js",
     "lint:analytics": "deno lint --no-config supabase/functions/hevy-actions/analytics.ts",
-    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/components.jsx src/SettingsSheets.jsx src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts"
+    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/components.jsx src/SettingsSheets.jsx src/dates.js src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts"
   },
   "dependencies": {
     "react": "19.1.1",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.58.0",
     "@openai/sites-vite-plugin": "0.2.0",
+    "@supabase/supabase-js": "2.110.2",
     "deno": "2.9.2",
     "supabase": "2.109.1",
     "vite": "8.0.16",

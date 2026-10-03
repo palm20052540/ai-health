@@ -1,3 +1,4 @@
+import { sourceInstant } from "./dates.js";
 // Shared browser/server contract. Only explicitly listed aggregate values may cross the model boundary.
 export const BRIEF_VERSION = "health-brief-v1";
 export const BRIEF_THEMES = [
@@ -78,8 +79,8 @@ export function buildBriefSnapshot(payload, _settings, dataState = "missing", no
     if (typeof id !== "string" || !id.trim() || seenTemplates.has(id)) return [];
     seenTemplates.add(id);
     const sessions = (Array.isArray(exercise.sessions) ? exercise.sessions : []).filter((session) =>
-      session.exercise_template_id === id && typeof session.workout_id === "string" && session.workout_id.trim() && timestamp(session.start_time || session.date || session.date_bangkok)
-    ).slice().sort((a, b) => Date.parse(a.start_time || a.date || a.date_bangkok) - Date.parse(b.start_time || b.date || b.date_bangkok));
+      session.exercise_template_id === id && typeof session.workout_id === "string" && session.workout_id.trim() && sourceInstant(session.start_time || session.start_time_bangkok || session.date || session.date_bangkok)
+    ).slice().sort((a, b) => Date.parse(sourceInstant(a.start_time || a.start_time_bangkok || a.date || a.date_bangkok)) - Date.parse(sourceInstant(b.start_time || b.start_time_bangkok || b.date || b.date_bangkok)));
     if (sessions.length < 2 || sessions[0].workout_id === sessions.at(-1).workout_id) return [];
     const first = finite(sessions[0]?.best_estimated_1rm_kg, 0.1, 2000);
     const last = finite(sessions.at(-1)?.best_estimated_1rm_kg, 0.1, 2000);

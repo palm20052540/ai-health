@@ -1,3 +1,4 @@
+import { sourceInstant } from "./dates.js";
 import { finiteNumber as number } from "./recoveryModel.js";
 
 function formatNumber(value, digits = 0) {
@@ -32,7 +33,9 @@ function chart(rows, key, fallback = 0) {
 
 function dateLabel(value) {
   if (!value) return "";
-  const date = new Date(String(value).length === 10 ? `${value}T00:00:00+07:00` : value);
+  const instant = sourceInstant(value);
+  if (!instant) return "—";
+  const date = new Date(instant);
   return new Intl.DateTimeFormat("en", { timeZone: "Asia/Bangkok", month: "short", day: "numeric" }).format(date);
 }
 

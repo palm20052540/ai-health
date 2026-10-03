@@ -1,3 +1,4 @@
+import { sourceInstant } from "./dates.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { BottomSheet, Insight, Sparkline } from "./components";
 import { Icon } from "./icons";
@@ -10,7 +11,9 @@ const EMPTY_SETTINGS = {};
 
 function dateText(value, short = false) {
   if (!value) return "—";
-  const parsed = new Date(String(value).length === 10 ? `${value}T00:00:00+07:00` : value);
+  const instant = sourceInstant(value);
+  if (!instant) return "—";
+  const parsed = new Date(instant);
   if (!Number.isFinite(parsed.getTime())) return "—";
   return new Intl.DateTimeFormat("en", { timeZone: "Asia/Bangkok", month: "short", day: "numeric", ...(short ? {} : { year: "numeric" }) }).format(parsed);
 }

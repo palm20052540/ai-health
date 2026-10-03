@@ -74,3 +74,9 @@ test("legacy routine entry point has no create, update, or confirmation action",
   assert.ok(!html.includes("Confirm update"));
   assert.ok(!html.includes("Preview routine change"));
 });
+
+test("mixed canonical start and Bangkok-local end preserve actual duration", () => {
+  const html = render(PostWorkoutSheet, { workout: { start_time: "2026-10-03T15:30:00Z", end_time_bangkok: "2026-10-03T23:30:00", average_rpe: null }, settings: { training: {} } });
+  assert.ok(html.includes("60 min"));
+  assert.ok(!html.includes("480 min"));
+});

@@ -4,7 +4,7 @@
 >
 > Last verified: 3 October 2026 (Asia/Bangkok)
 >
-> Branch status: cloud/tong-fit-workflows-20261003 implements the decision-first Health, Recovery and Training flow; not merged or deployed. See section 19 for verification and release gates.
+> Branch status: cloud/tong-fit-workflows-20261003 implements the decision-first workflows. Test-then-deploy was authorized on 3 October; see section 20 for release validation and the native Sites version for publication status. No GitHub merge is included.
 
 ## 1. Product Summary
 
@@ -585,3 +585,29 @@ Code and this master document are published together in `palm20052540/ai-health`
 ### Release gates and known boundaries
 
 Complete full SDK typecheck and browser/responsive QA against the exact branch before release. Deploying the new Supabase action and frontend Worker remains a separate authorized operation; older backend payloads cause safe missing-ID/RPE-coverage states. If the most recent workout falls outside the selected progress window, its actual overview is shown while exercise comparison detail explicitly reports unavailable coverage. Local input/settings persistence has no cross-device guarantee. Model output can remain unavailable until the production key, allowed-user gate and endpoint are verified through approved configuration steps.
+
+
+## 20. Authorized Release Validation — 3 October 2026
+
+The user authorized testing first and then deploying to the existing owner-private Site. Its verified pre-release state is Site version 5, source `b8309e3a3ead19ad315d4f2a522c487a0261e0ea`; the original repository implementation is `bfee716463aa8c4364d5ee15f443cd52ee6ca731`. The native source-opening helper restored the existing Site source. All overlapping baseline files match the original GitHub source; Site-only design assets and environment examples are preserved.
+
+### Repairs and reproducible validation
+
+- Added the exact already-imported `@supabase/supabase-js@2.110.2` SDK as a pinned development dependency. `npm run check` now uses Deno's manual local-module mode, avoiding the unavailable direct-registry route and checking real SDK types without permissive stubs. Package and Deno lockfiles are synchronized.
+- Read-only schema inspection established that generated Bangkok timestamp columns have no timezone suffix. Added explicit Bangkok-to-instant normalization so evening workouts do not appear seven hours later, shift chart dates, lose observed coverage or distort duration. Canonical UTC timestamps take precedence when supplied.
+- `npm run check`: passed all five entrypoints with the actual pinned SDK.
+- `npm run test`: 81 synthetic/mocked/React-render tests passed, including five new timezone regressions.
+- `npm run lint`: passed all 18 scoped changed modules.
+- The component interaction harness remains synthetic and covers applied check-ins, duplicate clicks, routine selection/edit/reset, goal/evidence invalidation and range changes. No model, health-sync or Hevy write calls are used by these tests.
+- Native Sites build helper runs the existing full Worker/client build and archive preparation pipeline. The exact candidate source is pushed before native version save/publication.
+- Actual browser, screenshot and responsive-layout QA remain **unverified**: this cloud runtime is portable, has no supported forwarded/supervised preview, and raw loopback browser access is blocked. This limitation is disclosed; it is not counted as a passing test. There are no known failing functional checks in the tested candidate.
+
+### Backend and configuration compatibility
+
+Read-only deployment/source inspection confirmed existing `hevy-actions` version 23 matches the pre-change source (apart from trailing whitespace). The updated action retains the existing custom API-key authentication and `verify_jwt: false` setting; no security mode is weakened. Existing tables have the fields used by the new analytics, and no database migration is needed. Only `hevy-actions` code needs a compatible backend update; OAuth, health sync and importer functions are preserved.
+
+`sync-hevy-data` is deployed and active at version 6. Its implementation and original table migrations remain absent from this source checkout; that absence is not a claim that the live importer is missing. No importer code or data is changed.
+
+Site configuration metadata lists the health API URL and existing Site/access secrets. Secret values were not copied, extracted or changed. No `OPENAI_API_KEY` or `OPENAI_MODEL` entry exists at the time of inspection, so the new Daily Brief will report rules-based fallback; live AI generation is not verified or activated. Existing private audience is owner-only, with no extra users/groups or external visitors, and is preserved.
+
+Deployment uses the same project and private publishing operation after the final checks. A successful native version/deployment receipt is the source of truth for the actual live version and URL. No merge to GitHub main, schema/data write, OAuth change, credential setup, billing change or paid model test is part of this release.

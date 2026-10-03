@@ -1,3 +1,4 @@
+import { sourceInstant } from "./dates.js";
 // Decision support only. Missing evidence never becomes a zero or an instruction to progress.
 const DAY = 86400000;
 export const PROGRESS_RANGES = [
@@ -23,7 +24,7 @@ export function templateId(value) {
 }
 
 export function sessionDate(session) {
-  return session?.start_time_bangkok || session?.date_bangkok || session?.start_time || session?.date || null;
+  return sourceInstant(session?.start_time || session?.start_time_bangkok || session?.date_bangkok || session?.date);
 }
 
 function timestamp(value) {
