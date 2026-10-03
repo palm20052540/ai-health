@@ -4,7 +4,7 @@
 >
 > Last verified: 3 October 2026 (Asia/Bangkok)
 >
-> Branch status: cloud-only Coach visibility change; not deployed. See section 18 for verification limits.
+> Branch status: cloud/tong-fit-workflows-20261003 implements the decision-first Health, Recovery and Training flow; not merged or deployed. See section 19 for verification and release gates.
 
 ## 1. Product Summary
 
@@ -35,31 +35,31 @@ This branch exposes three bottom-navigation tabs: Health, Recovery, and Training
 
 ### Health
 
-- AI-style health summary embedded at the top of the page
-- Steps, resting heart rate, weight, sleep, and active-zone-minute metrics
-- Time ranges: 7D, 30D, 6M, and 1Y
-- Health trend chart
-- Body-composition section
-- Goal-physique configuration and progress photos
+- A narrative Daily Brief answers today's health picture before six rated themes: sleep, recovery, training readiness, training trend, activity, and attention
+- Every theme includes explicit evidence and uncertainty; missing, stale and sample evidence cannot produce a personal rating
+- Optional OpenAI-generated narrative/summary through the same-origin `/api/health-brief`; validated deterministic evidence remains authoritative
+- Visible distinction between AI generated, rules-based, unavailable, cached and configuration/connection states
+- Detailed source metrics and charts follow the brief; windows are 7D, 30D, 3M, 6M and 1Y
+- No synthetic fallback metrics, workouts or recommendations when real data is empty or unavailable
+- Body composition, goal physique and local progress photos remain available
 
 ### Recovery
 
-- Recovery summary using HRV, sleep, resting heart rate, and training load
-- Evidence row and recovery trend chart
-- Recovery-driver list
-- Guidance uses trends and personal baselines rather than a single reading
+- A decision first: train as planned with a check-in, reduce, rest, or insufficient evidence
+- Draft pain location, pain severity (0–10) and fatigue (0–10) become active only with **Update recommendations**
+- The button re-fetches a fixed 28-day evidence window, then uses the newest submitted input and saved goal/profile; repeated clicks are deduplicated
+- A failed refresh withdraws previous advice; new evidence, settings, a Bangkok calendar day or more than 12 hours invalidate it
+- Saved check-in inputs and configurable goals/profile stay local to this browser; applied recommendations and raw source snapshots are not persisted
+- Conservative, unvalidated wellness rules, not medical readiness validation; no diagnosis, drug/hormone guidance or increasing load through pain
+- Existing evidence rows, recovery charts and source timestamps remain visible below the decision
 
 ### Training
 
-- Training summary for the selected range
-- Time ranges: 7D, 30D, 6M, and 1Y
-- Multi-select muscle groups
-- Aggregated volume, hard sets, average RPE, strength change, frequency, and last-trained date
-- Exercise-level estimated 1RM trends, top sets, recent momentum, and PR indicators
-- Workout timeline
-- Next-session load and rep recommendation
-- Charts show only dates with recorded sessions
-- Combined muscle selections deduplicate workouts when calculating aggregate volume and frequency
+1. **Latest session review:** actual working volume and sets, logged RPE/coverage, same-exercise-ID comparisons and contextual narrative; extra volume alone is never an improvement score
+2. **Next session plan:** actual Hevy routine list and detail by stable IDs, per-exercise load/sets/reps, goal/effort/recovery reasons, editable local draft and reset; no write to Hevy
+3. **Long-term progress:** 1M/3M/6M/12M windows, observed record span and comparison gaps, exercise detail and primary-muscle-only totals (including Core and Other)
+
+Routine history matching requires exercise-template IDs on both catalog and session records. Two distinct, recent sessions with at least 80% valid RPE coverage are needed for automatic targets. Source freshness, applied recovery, pain and fatigue guardrails take precedence. An optional extra rep at the same load may be suggested; a kg increase is never automatic. Older payloads without identity/coverage fields safely abstain until the updated backend is available.
 
 ### Coach (temporarily hidden)
 
@@ -77,7 +77,7 @@ Retained implementation:
 The retained Coach implementation supports two operating modes:
 
 1. **Evidence Engine** — deterministic reasoning from live aggregate data; always available.
-2. **Model-generated mode** — optional OpenAI Responses API output; enabled only when `OPENAI_API_KEY` is configured on the Site.
+2. **Model-generated mode** — the safe Health Brief generator also adapts output for the dormant Coach route; HTTP model calls require both the server-side key and configured allowed-user gate.
 
 The UI must state which mode produced the result. Never represent deterministic fallback text as model-generated output.
 
@@ -133,7 +133,7 @@ Responsibilities:
 - Keep upstream credentials out of browser code
 - Enforce the optional `ALLOWED_USER_EMAIL` check
 - Proxy dashboard, sync, freshness, and routine requests to Supabase
-- Call the OpenAI Responses API for Coach when configured
+- Call the OpenAI Responses API for the Health Daily Brief when configured and authorized; retain a safe dormant Coach adapter
 - Return JSON with `Cache-Control: no-store`
 
 The browser must call only same-origin `/api/*` routes. It must never call Supabase with a private API key or call OpenAI directly.
@@ -179,18 +179,16 @@ One compact dashboard request per range is preferred over many widget-level quer
 
 Do not sync Hevy or Google Health on every page load. Synchronization is manual or scheduled so repeated browsing does not waste Supabase or external API usage.
 
-### Coach generation (paused in the UI)
+### Health Daily Brief generation
 
-The current frontend does not run this flow while Coach is hidden. The retained flow for a future authorized restoration is:
+1. The browser allowlists only numeric aggregate statistics and dated source freshness. No IDs, workout titles, raw records, notes, pain reports, goals/free text, photos or credentials enter the model request.
+2. `POST /api/health-brief` sanitizes again, builds a conservative evidence draft and checks current coverage. It can report configuration safely even if the separate health API is not configured.
+3. Missing/stale/sample evidence abstains. Without `OPENAI_API_KEY`, the draft is explicitly rules-based. An HTTP request with a key but no `ALLOWED_USER_EMAIL` is also withheld from the model (`authorization_not_configured`).
+4. The Responses API uses `store: false` and strict JSON schema. The model can tighten narrative/summary wording; theme IDs, ratings, evidence and uncertainty must match the evidence engine exactly. Invalid, refused, incomplete or unsafe output falls back honestly.
+5. Cache entries are scoped to viewer/input/model/schema version, bounded to 32, and expire after 5 minutes; failures have a 30-second cooldown. Concurrent identical calls deduplicate; server timeout is 10 seconds and client timeout is 12 seconds.
+6. The existing `/api/coach` route adapts this validated result for compatibility; the frontend still never requests Coach.
 
-1. The frontend builds a small aggregate snapshot from the current live view.
-2. It calls `POST /api/coach`.
-3. If `OPENAI_API_KEY` is absent, the Worker returns `mode: "rules"` and the Evidence Engine remains active.
-4. If the key is present, the Worker sends the aggregate snapshot to the OpenAI Responses API with `store: false`.
-5. The response must match the expected Coach JSON structure.
-6. Invalid, unavailable, or aborted model requests fall back to the Evidence Engine.
-
-Only aggregated signals should be sent to the model. Do not send OAuth tokens, API keys, raw health records, email addresses, or unrelated personal data.
+Production configuration was not queried or changed in this implementation. No live model request was made. Only synthetic mocks exercised configured-model behavior.
 
 ## 6. API Surface
 
@@ -205,7 +203,8 @@ Only aggregated signals should be sent to the model. Do not send OAuth tokens, A
 | `GET` | `/api/routines/:id` | Read one routine |
 | `POST` | `/api/routines` | Create a routine |
 | `PUT` | `/api/routines/:id` | Update a routine |
-| `POST` | `/api/coach` | Generate or negotiate Coach mode |
+| `POST` | `/api/health-brief` | Validated aggregate Health Daily Brief with honest fallback |
+| `POST` | `/api/coach` | Dormant safe compatibility adapter |
 
 ### Compact Supabase routes
 
@@ -265,8 +264,8 @@ Common local variables:
 
 - `AI_HEALTH_API_URL`
 - `AI_HEALTH_PLUGIN_API_KEY` — contains the dedicated Site API key value
-- `ALLOWED_USER_EMAIL` — recommended defense in depth
-- `OPENAI_API_KEY` — optional; enables model-generated Coach output
+- `ALLOWED_USER_EMAIL` — required before HTTP model generation; visitor email must match
+- `OPENAI_API_KEY` — optional server-only key for Health Brief narrative/summary generation
 - `OPENAI_MODEL` — optional model override
 
 The value stored as the Site's `AI_HEALTH_PLUGIN_API_KEY` should match the Supabase `AI_HEALTH_SITE_API_KEY`. Keep the Site key separate from the personal Codex plugin key.
@@ -497,7 +496,7 @@ First recovery step: reopen or refresh the Site with an active ChatGPT session. 
 
 - Single-user architecture
 - Settings and photos are local to one browser
-- OpenAI-generated Coach output is disabled until a Site-side `OPENAI_API_KEY` is configured
+- Model output requires a Site-side `OPENAI_API_KEY` and allowed-user authorization; this change does not verify or configure production secrets
 - No medical diagnosis or clinical decision support
 - No automatic routine mutation without explicit user review
 - Estimated 1RM and progression guidance depend on Hevy logging quality and RPE coverage
@@ -524,7 +523,7 @@ A change is complete only when:
 - `npm run check`, `npm run build`, and `git diff --check` pass.
 - The affected flow is verified in a browser.
 - Console errors are resolved or explicitly documented.
-- Production is deployed when the request changes the Site.
+- Merge or production deployment occurs only when separately authorized; cloud-only implementation is delivered on an isolated branch.
 - This master document is updated when architecture, environment keys, routes, major features, or operational constraints change.
 
 
@@ -550,3 +549,39 @@ Verification in the cloud:
 - Credential-pattern scan of source files: no matching private-key/token patterns found. No real `.env`, runtime credentials, health records, or model calls were used for this proof.
 
 This verifies cloud source access, code editing, focused regression checks, and production build execution without the user's PC. It does not verify live health APIs or production behavior. No merge or deployment is included. Before release, complete the aggregate type check and browser QA against this exact branch.
+
+
+## 19. Decision-First Workflow Implementation — 3 October 2026
+
+### Source and publication scope
+
+Prepared in the assistant cloud checkout. Before editing, the original repository's `agent/add-hevy-integration` was rechecked at `03efc5012e4a7fa90aad5b92f8c47d13c9e09a02`; the verified Coach-hiding branch remained `cb622791ac677dc0d0e5426d36f4fbf87d579889`. This isolated implementation branch builds on that Coach-hiding commit. Existing remote files omitted from the local materialization are preserved using the remote base tree; no force update to user branches is used.
+
+Code and this master document are published together in `palm20052540/ai-health`, branch `cloud/tong-fit-workflows-20261003`. No new repository, PR merge, production deployment, schema application, live Hevy write, OAuth grant, paid model call or real health-data export is included.
+
+### Calculation and safety contract
+
+- Numeric null, undefined, blank, nonnumeric, boolean and object values stay missing. Actual numeric zero remains zero; RPE zero is invalid because logged RPE must be 1–10.
+- Summary, recent workouts, muscle totals and exercise progress share normalized non-warmup working-set semantics. RPE coverage counts valid RPE divided by all working sets. A hard set is the documented convention of valid RPE at least 7.
+- Primary muscle attribution only. Secondary muscles are not counted. Unknown muscle assignment is never guessed from exercise title.
+- Stable template IDs isolate same-name exercises and retain renamed-template history. Source reads are paginated; missing e1RM stays null. Repeated exercise blocks cannot masquerade as separate workouts.
+- Recovery thresholds are conservative product heuristics, not clinically validated cutoffs: sleep below 6h, HRV more than 20% below the available average, resting HR more than 10% above average or fatigue at least 5 suggest reduction. Pain always prevents progression; pain at least 7 or fatigue at least 8 suggests rest from strenuous work.
+- A train decision requires pain-free, explicit input; fresh measurement AND sync times (48h) for sleep, HRV and resting HR; positive available baselines and at least three HRV/resting-HR readings. Missing any source yields unknown. Saved free-text restrictions/injuries also require individual review and prevent automatic clearance.
+- This strict all-three-source requirement can often abstain when a wearable does not supply one metric. Abstention is intentional; it is not a claim that the user is unwell.
+- Health Brief trend comparisons require stable IDs and distinct dated workouts. Per-source freshness is visible and a recent sync of one source cannot make another source current.
+- Existing sync implementation limits remain unchanged: Google Health default 7 days/max 90 days, heart-rate sync 14 days, dashboard reads up to 365 stored days. Selected windows are not proof that history exists. `sync-hevy-data` source and original Hevy table migrations are absent from this checkout; their deployed existence was not checked.
+
+### Verification
+
+- `npm run test`: 76 passing synthetic/mocked unit and actual React server-render tests at this checkpoint; no live service calls.
+- `npm run lint`: scoped lint for the 17 changed frontend/Worker/analytics modules. The Deno-only no-window rule is excluded for browser-targeted code.
+- Actual React hook interaction harness (temporary QA tooling): passed initial loading, explicit draft/apply, duplicate-submit dedupe, routine switching, local override/reset, 3M/12M changes, pain propagation across tabs and failed-refresh invalidation. This is component interaction evidence, not browser DOM/layout proof.
+- `npm run build`: full Worker/client build plus existing secret-output sanitation and Sites packaging passed. Wrangler's local log-directory warning is non-fatal.
+- Offline Deno typecheck of pure backend analytics passed. A scoped function check with a temporary permissive SDK declaration also passed, but does not validate real SDK types.
+- `npm run check`: attempted with the real pinned imports; dependency downloads did not finish before the 75-second limit. Full aggregate SDK typecheck remains unverified.
+- Browser QA: the supported cloud browser refused the loopback preview before page load (`ERR_BLOCKED_BY_CLIENT`). No access restriction was bypassed; no real rendered screenshot, responsive layout, browser console or native browser interaction claim is made.
+- Process configuration presence only was inspected: `OPENAI_API_KEY`, `OPENAI_MODEL`, `AI_HEALTH_API_URL`, `AI_HEALTH_PLUGIN_API_KEY` and `ALLOWED_USER_EMAIL` were unset in this cloud test process. Values were not inspected; no production secret/configuration inference is made.
+
+### Release gates and known boundaries
+
+Complete full SDK typecheck and browser/responsive QA against the exact branch before release. Deploying the new Supabase action and frontend Worker remains a separate authorized operation; older backend payloads cause safe missing-ID/RPE-coverage states. If the most recent workout falls outside the selected progress window, its actual overview is shown while exercise comparison detail explicitly reports unavailable coverage. Local input/settings persistence has no cross-device guarantee. Model output can remain unavailable until the production key, allowed-user gate and endpoint are verified through approved configuration steps.

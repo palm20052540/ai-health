@@ -1,4 +1,4 @@
-const RANGE_DAYS = { "7D": 7, "30D": 30, "6M": 180, "1Y": 365 };
+const RANGE_DAYS = { "7D": 7, "30D": 30, "3M": 90, "6M": 180, "1Y": 365 };
 
 export function daysForRange(range) {
   return RANGE_DAYS[range] || 30;
@@ -61,8 +61,19 @@ export function syncMessage(payload) {
 }
 
 export function formatGeneratedAt(value) {
-  if (!value) return "Not synced yet";
+  if (!value || !Number.isFinite(Date.parse(value))) return "Not synced yet";
   return new Intl.DateTimeFormat("en", {
     timeZone: "Asia/Bangkok", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   }).format(new Date(value));
+}
+
+export function isSamplePayload(payload) {
+  return Boolean(payload && (payload.sample || payload.demo || payload.is_sample || ['sample', 'demo'].includes(payload.mode) || ['sample', 'demo'].includes(payload.data_state)));
+}
+
+export function dashboardDataState(payload, loadState = {}) {
+  if (isSamplePayload(payload)) return 'sample';
+  if (!payload) return loadState.status || 'missing';
+  if (!payload.recap || !Number.isFinite(Date.parse(payload.generated_at || ''))) return 'missing';
+  return loadState.error ? 'stale' : 'live';
 }

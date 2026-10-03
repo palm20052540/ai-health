@@ -9,10 +9,10 @@ export function Header({ syncing, onSync, onSettings, status, lastSynced }) {
         <div className="brand">ต๊อง <span>Fit</span></div>
         <div className="brand-subtitle">AI Health Portal <span className={`data-status ${status === "Live data" ? "live" : ""}`}>{status}</span></div>
       </div>
-      <button className="icon-button" aria-label="Open settings" onClick={onSettings}><Icon name="settings" size={26} /></button>
+      <button type="button" className="icon-button" aria-label="Open settings" onClick={onSettings}><Icon name="settings" size={26} /></button>
       <div className="sync-row">
         <span role="status" aria-live="polite">{syncing ? "Checking data freshness…" : `Last synced: ${lastSynced || "—"}`}</span>
-        <button className="sync-button" onClick={onSync} disabled={syncing}>
+        <button type="button" className="sync-button" onClick={onSync} disabled={syncing}>
           <span className={syncing ? "spin" : ""}><Icon name="sync" size={20} /></span>{syncing ? "Syncing" : "Sync now"}
         </button>
       </div>
@@ -21,8 +21,8 @@ export function Header({ syncing, onSync, onSettings, status, lastSynced }) {
 }
 
 export function RangeControl({ value, onChange }) {
-  return <div className="range-control" role="group" aria-label="Time range">{["7D", "30D", "6M", "1Y"].map((range) => (
-    <button key={range} aria-pressed={value === range} className={value === range ? "active" : ""} onClick={() => onChange(range)}>{range}</button>
+  return <div className="range-control" role="group" aria-label="Time range">{["7D", "30D", "3M", "6M", "1Y"].map((range) => (
+    <button type="button" key={range} aria-pressed={value === range} className={value === range ? "active" : ""} onClick={() => onChange(range)}>{range}</button>
   ))}</div>;
 }
 
@@ -37,7 +37,7 @@ export function Insight({ tone = "blue", icon = "sparkle", title, copy }) {
 
 export function EvidenceRow({ items, onMetric }) {
   return <div className="evidence-row">{items.map((item) => (
-    <button key={item.label} onClick={() => onMetric?.(item.metric || item.label)}>
+    <button type="button" key={item.label} onClick={() => onMetric?.(item.metric || item.label)}>
       <span className="evidence-label">{item.label}</span>
       <strong>{item.value}</strong>
       <span className={`evidence-delta ${item.tone || ""}`}>{item.delta}</span>
@@ -46,6 +46,7 @@ export function EvidenceRow({ items, onMetric }) {
 }
 
 function points(values, width = 286, height = 126) {
+  if (!Array.isArray(values) || values.length < 2) return [];
   const min = Math.min(...values) - .5;
   const max = Math.max(...values) + .5;
   return values.map((value, index) => {
@@ -56,7 +57,9 @@ function points(values, width = 286, height = 126) {
 }
 
 export function TrendChart({ data }) {
-  const summary = data.series.map((series) => `${series.name}: ${series.values.at(-1)} at the latest point`).join(". ");
+  const hasData = data.series.some((series) => series.values.length > 0);
+  if (!hasData) return <section className="chart-section"><h2>{data.title}</h2><p className="empty-state compact">No recorded points in this period.</p></section>;
+  const summary = data.series.map((series) => `${series.name}: ${series.values.length ? series.values.at(-1) + " at the latest point" : "no recorded points"}`).join(". ");
   return (
     <section className="chart-section">
       <div className="section-title-row">
@@ -75,7 +78,7 @@ export function TrendChart({ data }) {
             </g>;
           })}
         </svg>
-        <div className="chart-labels">{data.labels.map((label) => <span key={label}>{label}</span>)}</div>
+        <div className="chart-labels">{data.labels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div>
       </div>
     </section>
   );
@@ -83,7 +86,7 @@ export function TrendChart({ data }) {
 
 export function MetricRow({ icon, label, meta, value, delta, tone = "blue", onClick }) {
   return (
-    <button className="metric-row" onClick={onClick}>
+    <button type="button" className="metric-row" onClick={onClick}>
       <span className={`metric-icon ${tone}`}><Icon name={icon} size={22} /></span>
       <span className="metric-copy"><strong>{label}</strong><small>{meta}</small></span>
       <strong className="metric-value">{value}</strong>
@@ -100,7 +103,7 @@ export function Sparkline({ values, color = "#146BFA" }) {
 
 export function BottomNav({ active, onChange }) {
   return <nav className="bottom-nav" aria-label="Primary navigation">{VISIBLE_TABS.map((tab) => (
-    <button key={tab.label} aria-current={active === tab.label ? "page" : undefined} className={active === tab.label ? "active" : ""} onClick={() => onChange(tab.label)}>
+    <button type="button" key={tab.label} aria-current={active === tab.label ? "page" : undefined} className={active === tab.label ? "active" : ""} onClick={() => onChange(tab.label)}>
       <Icon name={tab.icon} size={25} /><span>{tab.label}</span>
     </button>
   ))}</nav>;
@@ -137,7 +140,7 @@ export function BottomSheet({ title, children, onClose }) {
 
   return <div className="sheet-backdrop" onMouseDown={onClose} role="presentation"><section ref={sheetRef} className="bottom-sheet" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby={titleId}>
     <div className="sheet-handle" />
-    <div className="sheet-title"><h2 id={titleId}>{title}</h2><button ref={closeRef} className="icon-button" onClick={onClose} aria-label={`Close ${title}`}><Icon name="close" size={22} /></button></div>
+    <div className="sheet-title"><h2 id={titleId}>{title}</h2><button type="button" ref={closeRef} className="icon-button" onClick={onClose} aria-label={`Close ${title}`}><Icon name="close" size={22} /></button></div>
     {children}
   </section></div>;
 }

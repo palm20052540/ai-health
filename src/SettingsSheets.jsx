@@ -38,7 +38,7 @@ function PersonalForm({ draft, setDraft }) {
     <div className="form-grid"><Field label="Age"><input type="number" min="13" max="120" value={draft.age} onChange={(event) => setDraft({ ...draft, age: event.target.value })} /></Field><Field label="Height (cm)"><input type="number" min="100" max="250" value={draft.heightCm} onChange={(event) => setDraft({ ...draft, heightCm: event.target.value })} /></Field></div>
     <Field label="Physical limitations"><textarea rows="3" value={draft.limitations} onChange={(event) => setDraft({ ...draft, limitations: event.target.value })} placeholder="Movement restrictions or conditions to account for" /></Field>
     <Field label="Previous injuries"><textarea rows="3" value={draft.previousInjuries} onChange={(event) => setDraft({ ...draft, previousInjuries: event.target.value })} /></Field>
-    <Field label="AI precautions"><textarea rows="3" value={draft.precautions} onChange={(event) => setDraft({ ...draft, precautions: event.target.value })} placeholder="What recommendations should avoid" /><small>Used for wellness guidance only—not medical diagnosis.</small></Field>
+    <Field label="AI precautions"><textarea rows="3" value={draft.precautions} onChange={(event) => setDraft({ ...draft, precautions: event.target.value })} placeholder="What recommendations should avoid" /><small>Saved constraints make automatic progression unavailable until individually reviewed.</small></Field>
   </>;
 }
 
@@ -57,7 +57,10 @@ function PhysiqueForm({ draft, setDraft, openPhotos }) {
   </>;
 }
 
-function validateSection(section, draft) {
+export function validateSection(section, draft) {
+  const numeric = (value, min, max) => value !== '' && value != null && Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max;
+  if (section === 'goals' && (!numeric(draft.durationWeeks, 1, 104) || !numeric(draft.trainingFrequency, 1, 7))) return 'Enter a valid duration and training frequency.';
+  if (section === 'training' && (!numeric(draft.targetRpe, 1, 10) || !numeric(draft.maxRpe, 1, 10) || !numeric(draft.targetSetsMin, 1, 40) || !numeric(draft.targetSetsMax, 1, 50))) return 'Enter valid RPE targets (1–10) and set limits.';
   if (section === "goals") {
     if (draft.durationWeeks < 1 || draft.durationWeeks > 104) return "Duration must be between 1 and 104 weeks.";
     if (draft.trainingFrequency < 1 || draft.trainingFrequency > 7) return "Training frequency must be between 1 and 7 days per week.";
@@ -81,7 +84,7 @@ export function SettingsMenu({ settings, notice, onEdit, onReset, onClose }) {
   const summaries = settingSummaries(settings);
   return <BottomSheet title="Settings" onClose={onClose}>
     {notice ? <div className="settings-notice" role="status"><Icon name="check" size={18} /><span>{notice}</span></div> : null}
-    <div className="settings-list">{Object.entries(TITLES).map(([key, title]) => <button key={key} onClick={() => onEdit(key)}><span><strong>{title}</strong><small>{summaries[key]}</small></span><Icon name="chevron" size={18} /></button>)}</div>
+    <div className="settings-list">{Object.entries(TITLES).map(([key, title]) => <button type="button" key={key} onClick={() => onEdit(key)}><span><strong>{title}</strong><small>{summaries[key]}</small></span><Icon name="chevron" size={18} /></button>)}</div>
     <p className="storage-note">Saved privately in this browser. No health data is uploaded by these settings.</p>
     {confirmingReset ? <div className="reset-confirm" role="group" aria-label="Confirm reset settings"><p><strong>Reset all settings?</strong><span>This restores the original goals and preferences on this browser.</span></p><div><button className="secondary-button" type="button" onClick={() => setConfirmingReset(false)}>Cancel</button><button className="danger-button" type="button" onClick={onReset}>Reset</button></div></div> : <button className="reset-settings-button" type="button" onClick={() => setConfirmingReset(true)}>Reset settings</button>}
   </BottomSheet>;

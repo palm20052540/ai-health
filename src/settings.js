@@ -59,7 +59,7 @@ export function loadSettings() {
 }
 
 export function persistSettings(settings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, version: 1 }));
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, version: 1 })); return true; } catch { return false; }
 }
 
 export function resetSettings() {

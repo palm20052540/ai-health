@@ -61,7 +61,7 @@ export const metricDetails = {
   },
   "Hard sets": {
     title: "Hard sets",
-    body: "Working sets close enough to failure to contribute meaningfully to hypertrophy. Warm-ups are excluded when set type is available.",
-    method: "Uses completed sets, reps, and logged RPE. Muscle allocation follows Hevy's primary and secondary muscle groups.",
+    body: "Logged non-warmup sets with a valid RPE of at least 7. This is a simple effort convention, not proof of hypertrophy stimulus.",
+    method: "Uses logged RPE from 1–10. Warmup aliases are excluded. Muscle totals follow Hevy's primary muscle only; secondary muscles are not counted. Missing RPE is not classified as a hard set.",
   },
 };

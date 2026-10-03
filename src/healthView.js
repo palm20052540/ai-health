@@ -1,7 +1,4 @@
-function number(value) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
+import { finiteNumber as number } from "./recoveryModel.js";
 
 function formatNumber(value, digits = 0) {
   const parsed = number(value);
@@ -62,7 +59,6 @@ export function buildLiveView(payload, settings) {
   const recoveryRows = evidence.recovery_daily || [];
   const hrvRows = recoveryRows.filter((row) => row.type === "daily-heart-rate-variability" && number(row.value) != null);
   const restingRows = recoveryRows.filter((row) => row.type === "daily-resting-heart-rate" && number(row.value) != null);
-  const sleepRows = recoveryRows.filter((row) => row.type === "sleep" && number(row.value) != null);
   const weights = payload.body_measurements || [];
   const latestWeight = weights[0]?.weight_kg;
 
@@ -75,6 +71,8 @@ export function buildLiveView(payload, settings) {
     const delta = first && last ? ((last - first) / first) * 100 : null;
     return {
       name: exercise.query || sessions[0]?.title || "Exercise",
+      exercise_template_id: exercise.exercise_template_id || null,
+      id: exercise.exercise_template_id || null,
       muscleGroup: exercise.muscle_group || null,
       metric: "Estimated 1RM",
       result: delta == null ? "Building" : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`,
@@ -87,26 +85,13 @@ export function buildLiveView(payload, settings) {
   const leadExercise = exerciseRows[0];
   const leadSessions = leadExercise?.sessions || [];
   const latestSession = leadSessions.at(-1);
-  const previousSession = leadSessions.at(-2);
   const currentLoad = number(latestSession?.best_set?.weight_kg);
   const targetRpe = number(settings?.training?.targetRpe) ?? 8;
-  const maxRpe = number(settings?.training?.maxRpe) ?? 9;
-  const progressionThreshold = Math.min(maxRpe, targetRpe + 0.5);
-  const canProgress = currentLoad != null && number(latestSession?.average_rpe) != null && number(previousSession?.average_rpe) != null &&
-    latestSession.average_rpe <= progressionThreshold && previousSession.average_rpe <= progressionThreshold;
-  const nextLoad = currentLoad == null ? null : currentLoad + (canProgress ? 2.5 : 0);
-  const latestReps = number(latestSession?.best_set?.reps);
+  // Legacy details can show a held load only. Routine-specific planning owns all progression.
   const recommendation = {
-    exercise: leadExercise?.name || "Next exercise",
-    load: nextLoad,
-    reps: latestReps == null ? "configured range" : `${Math.max(1, latestReps - 1)}–${latestReps + 1}`,
-    targetRpe,
-    explanation: currentLoad == null
-      ? "More completed sets are needed before a load recommendation can be calculated."
-      : canProgress
-        ? `The last two logged sessions averaged RPE ${previousSession.average_rpe} and ${latestSession.average_rpe}, supporting a 2.5 kg increase.`
-        : `Hold ${formatNumber(currentLoad, 1)} kg because recent effort is above your configured threshold (RPE ${progressionThreshold}) or coverage is incomplete.`,
-    currentLoad,
+    exercise: leadExercise?.name || "Next exercise", exercise_template_id: leadExercise?.exercise_template_id,
+    load: currentLoad, currentLoad, targetRpe, reps: latestSession?.best_set?.reps ?? "—",
+    explanation: "Choose a real routine in Next Session Plan and submit today’s Recovery check-in before considering progression.",
   };
 
   const hrvLatest = recovery.hrv_ms?.latest;
@@ -178,7 +163,7 @@ export function buildLiveView(payload, settings) {
       evidence: [
         { label: "Sessions", value: formatNumber(training.workouts), delta: "selected range" },
         { label: "Hard sets", value: formatNumber((training.muscle_groups || []).reduce((sum, item) => sum + Number(item.hard_sets || 0), 0)), delta: `${formatNumber(training.rpe_coverage_percent)}% RPE coverage`, metric: "Hard sets" },
-        { label: "Avg RPE", value: formatNumber(training.average_rpe, 1), delta: training.average_rpe > 8.5 ? "elevated" : "in range", tone: "orange" },
+        { label: "Avg RPE", value: formatNumber(training.average_rpe, 1), delta: number(training.average_rpe) == null ? "not logged" : training.average_rpe > 8.5 ? "elevated" : "logged", tone: "orange" },
       ],
       exercises: exerciseRows,
       muscles: training.muscle_groups || [],
