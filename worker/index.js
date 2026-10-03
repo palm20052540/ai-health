@@ -1,6 +1,7 @@
 import { generateHealthBrief, readBoundedJson, toLegacyCoach } from "./dailyBrief.js";
 import { briefPrincipal, handleBriefMcp } from "./briefMcp.js";
 import { readSavedReport } from "./briefStore.js";
+import { deliverTrainingSync } from "./briefEvents.js";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -56,8 +57,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const readDashboard = (days) => { requireConfig(env); return upstream(env, `/v1/portal-dashboard?days=${days}`); };
+    const sendWebhook = (payload) => { requireConfig(env); return upstream(env, "/v1/mcp-event-delivery", { method: "POST", body: JSON.stringify(payload) }); };
     if (url.pathname === "/mcp") return handleBriefMcp(request, env, {
       readDashboard,
+      sendWebhook,
       refreshDailySources: async () => {
         requireConfig(env);
         const refreshed = await upstream(env, "/v1/sync-missing-data", { method: "POST", body: JSON.stringify({ sources: ["google_health"] }) });
@@ -86,13 +89,18 @@ export default {
         return json(await upstream(env, `/v1/portal-dashboard?days=${days}`));
       }
       if (request.method === "POST" && url.pathname === "/api/sync") {
+        const origin = request.headers.get("origin");
+        if (origin && origin !== url.origin) return json({ error: "Cross-origin requests are not allowed." }, 403);
         const body = await request.json().catch(() => ({}));
         const sources = Array.isArray(body.sources) ? body.sources : ["hevy", "google_health"];
         const result = await upstream(env, "/v1/sync-missing-data", {
           method: "POST",
           body: JSON.stringify({ sources }),
         });
-        return json({ ...result, assistant_analysis: { status: "blocked", message: "Source sync completed its request. Automatic Training analysis is not connected yet; no assistant run was started. A saved summary is checked against the updated source evidence." } });
+        let assistantAnalysis;
+        try { assistantAnalysis = await deliverTrainingSync(env, briefPrincipal(request, env), result, { readDashboard, sendWebhook }); }
+        catch { assistantAnalysis = { status: "unavailable", message: "Source sync completed its request, but the private Training event could not be delivered. No completed analysis is claimed." }; }
+        return json({ ...result, assistant_analysis: assistantAnalysis });
       }
       if (request.method === "GET" && url.pathname === "/api/status") {
         return json(await upstream(env, "/v1/data-freshness"));

@@ -4,6 +4,8 @@ import {
   exerciseIdentity, exerciseTemplateId, finiteNumber, round, summarizeWorkingSets,
 } from "./analytics.ts";
 
+import { handleMcpEventDelivery } from "./webhook.ts";
+
 const HEVY_BASE = "https://api.hevyapp.com/v1";
 
 function required(name: string): string {
@@ -827,6 +829,10 @@ Deno.serve(async (req) => {
     const path = pathAfterFunction(req.url);
     const route = path[0] || "";
     const params = new URL(req.url).searchParams;
+    if (req.method === "POST" && route === "v1" && path[1] === "mcp-event-delivery" && path.length === 2) {
+      if (caller !== "codex_plugin") return json({ accepted: false, status: null, errorCode: "forbidden" }, 403);
+      return json(await handleMcpEventDelivery(req));
+    }
     if (req.method === "GET" && route === "v1" && path[1] === "daily-state")
       return json(await dailyState(db, userId, params.get("date")));
     if (req.method === "GET" && route === "v1" && path[1] === "health-recap")

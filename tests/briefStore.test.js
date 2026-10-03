@@ -83,5 +83,5 @@ test("MCP read/save/readback flow and strict arguments work without inference", 
   const crossOrigin = await handleBriefMcp(request("tools/list", {}, true, { origin: "https://untrusted.example" }), config, deps);
   assert.equal(crossOrigin.status, 403);
   const event = await (await handleBriefMcp(request("events/subscribe", {}), config, deps)).json();
-  assert.equal(event.error.code, -32601);
+  assert.equal(event.error.code, -32602);
 });

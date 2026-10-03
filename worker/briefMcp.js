@@ -1,5 +1,6 @@
 import { readBoundedJson } from "./dailyBrief.js";
 import { readReportInput, readSavedReport, saveReport } from "./briefStore.js";
+import { TRAINING_EVENT, subscribeTraining, unsubscribeTraining } from "./briefEvents.js";
 
 const headers = { "Content-Type": "application/json", "Cache-Control": "private, no-store" };
 const kindSchema = { type: "string", enum: ["daily", "training"] };
@@ -41,7 +42,7 @@ export function briefPrincipal(request, env) {
 }
 
 function response(body, status = 200) { return new Response(JSON.stringify(body), { status, headers }); }
-function rpcError(id, code, message, status = 200) { return response({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }, status); }
+function rpcError(id, code, message, status = 200, data) { return response({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...(data ? { data } : {}) } }, status); }
 function exactArguments(args, keys) { return args && typeof args === "object" && !Array.isArray(args) && Object.keys(args).length === keys.length && keys.every((key) => Object.hasOwn(args, key)); }
 
 export async function handleBriefMcp(request, env, dependencies) {
@@ -55,13 +56,22 @@ export async function handleBriefMcp(request, env, dependencies) {
   if (body.method === "notifications/initialized") return new Response(null, { status: 202, headers });
   const ok = (result) => response({ jsonrpc: "2.0", id: body.id ?? null, result });
   // Discovery contains no private source data; Sites still enforces its private boundary.
+  if (body.method === "server/discover") return ok({ resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: { tools: {}, events: {} } });
   if (body.method === "initialize") return ok({ protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "tong-fit-private-briefs", version: "1.0.0" } });
   if (body.method === "ping") return ok({});
   if (body.method === "tools/list") return ok({ tools: BRIEF_TOOLS });
-  if (body.method !== "tools/call") return rpcError(body.id, -32601, "Method not available. Event subscriptions are not enabled.");
+  if (body.method === "events/list") return ok({ events: [TRAINING_EVENT] });
+  if (!["tools/call", "events/subscribe", "events/unsubscribe"].includes(body.method)) return rpcError(body.id, -32601, "Method not available.");
   let ownerId;
   try { ownerId = briefPrincipal(request, env); }
   catch (error) { return rpcError(body.id, -32001, error.message, error.status); }
+  if (body.method.startsWith("events/")) {
+    try {
+      return ok(body.method === "events/subscribe" ? await subscribeTraining(env, ownerId, body.params, dependencies.sendWebhook) : await unsubscribeTraining(env, ownerId, body.params));
+    } catch (error) {
+      return rpcError(body.id, error?.rpcCode || -32603, error?.rpcCode ? error.message : "The subscription operation could not complete.", 200, { reason: error?.reason || "internal_error" });
+    }
+  }
   const name = body.params?.name;
   const args = body.params?.arguments || {};
   const tool = BRIEF_TOOLS.find((candidate) => candidate.name === name);
