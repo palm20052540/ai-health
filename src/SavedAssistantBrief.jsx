@@ -76,7 +76,7 @@ export function useSavedAssistantBrief(kind, refreshKey = 0, enabled = true, dis
   void tick;
   if (!enabled) return { ...EMPTY_BRIEF, status: disabledStatus };
   // Hide a previous request's result immediately, even before the effect runs.
-  return result?.key === requestKey ? briefCacheExpired(result.brief) ? { ...EMPTY_BRIEF, status: "stale" } : expireSavedBrief(result.brief) : EMPTY_BRIEF;
+  return result?.key === requestKey ? briefCacheExpired(result.brief) ? { ...EMPTY_BRIEF, status: "loading" } : expireSavedBrief(result.brief) : EMPTY_BRIEF;
 }
 
 export function SavedBriefStatus({ brief, fallback = false }) {

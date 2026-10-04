@@ -26,7 +26,7 @@ test("DailyBrief actual JSX leads with a narrative then six accessible evidence-
   assert.equal((html.match(/brief-rating-insufficient/g) || []).length, 6);
   for (const label of ["Sleep", "Recovery", "Training readiness", "Training trend", "Activity", "Attention"]) assert.ok(html.includes(label));
   assert.ok(html.includes("Brief unavailable"));
-  assert.ok(html.includes("The saved assistant summary is out of date"));
+  assert.ok(html.includes("The saved assistant summary is unavailable"));
   assert.ok(!html.includes("AI generated"));
 });
 

@@ -162,3 +162,16 @@ test("integration keeps saved reviews refreshable after Sync and leaves existing
   assert.ok(app.includes("clearSavedBriefCache"));
   assert.ok(savedSource.includes("controller.abort()"));
 });
+
+test("cache revalidation withholds prose without falsely requesting new assistant generation", async () => {
+  const html = render(DailyBriefContent, { dataState: "stale", assistantBrief: saved() });
+  assert.ok(!html.includes(dailyReport.narrative));
+  assert.ok(html.includes("Checking for a saved assistant summary"));
+  assert.ok(!html.includes("out of date"));
+  assert.ok(!html.includes("new summary needs to be saved"));
+  const source = await readFile(new URL("../src/SavedAssistantBrief.jsx", import.meta.url), "utf8");
+  assert.ok(source.includes('briefCacheExpired(result.brief) ? { ...EMPTY_BRIEF, status: "loading" }'));
+  const stale = render(SavedTrainingBriefContent, { brief: saved("training", { status: "stale", report: null }) });
+  assert.ok(stale.includes("New summary needed"));
+  assert.ok(stale.includes("out of date"));
+});
