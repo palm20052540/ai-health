@@ -15,7 +15,7 @@
     "sync:refresh": "deno run --allow-env --allow-net scripts/sync-health-data.ts --refresh-only",
     "test": "node --test tests/*.test.js",
     "lint:analytics": "deno lint --no-config supabase/functions/hevy-actions/analytics.ts",
-    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/MetricHistorySheet.jsx src/metricHistory.js src/components.jsx src/SettingsSheets.jsx src/dates.js src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts src/assistantReports.js src/SavedAssistantBrief.jsx worker/briefStore.js worker/briefMcp.js worker/briefEvents.js supabase/functions/hevy-actions/webhook.ts",
+    "lint": "deno lint --no-config --rules-exclude=no-window src/App.jsx src/RecoveryCheckIn.jsx src/DailyBrief.jsx src/TrainingView.jsx src/DetailSheets.jsx src/MetricHistorySheet.jsx src/metricHistory.js src/ownerStorage.js src/dashboardCache.js src/briefCache.js src/trainingHistory.js src/TrainingHistorySheet.jsx src/components.jsx src/SettingsSheets.jsx src/dates.js src/healthView.js src/portalData.js src/settings.js src/data.js src/recoveryModel.js src/trainingModel.js src/dailyBrief.js worker/index.js worker/dailyBrief.js supabase/functions/hevy-actions/analytics.ts src/assistantReports.js src/SavedAssistantBrief.jsx worker/briefStore.js worker/briefMcp.js worker/briefEvents.js supabase/functions/hevy-actions/webhook.ts",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

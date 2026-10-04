@@ -2,7 +2,7 @@ import React from "react";
 import { BottomSheet, RangeControl } from "./components";
 import { buildMetricHistory, historyDate } from "./metricHistory.js";
 
-export function MetricHistorySheet({ metric, payload, range, dataState, onRangeChange, onClose }) {
+export function MetricHistorySheet({ metric, payload, range, dataState, returnTab = "Health", onRangeChange, onClose }) {
   const history = buildMetricHistory(payload, metric, range, dataState);
   const unavailable = ["missing", "sample", "unavailable"].includes(history.status);
   return <BottomSheet title={`${metric} history`} onClose={onClose}>
@@ -22,7 +22,7 @@ export function MetricHistorySheet({ metric, payload, range, dataState, onRangeC
         </li>)}</ol> : <p className="empty-state compact">No {metric.toLowerCase()} records returned for this period. Missing days are not filled with zero.</p>}
         {history.snapshotAt ? <p className="history-coverage">Snapshot retrieved {historyDate(history.snapshotAt)}. Retrieval time is not the measurement time.</p> : null}
       </>}
-      <button type="button" className="secondary-button full" onClick={onClose}>Back to Health metrics</button>
+      <button type="button" className="secondary-button full" onClick={onClose}>Back to {returnTab} metrics</button>
     </div>
   </BottomSheet>;
 }

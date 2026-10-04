@@ -1,3 +1,4 @@
+import { WorkingSetRecords } from "./TrainingHistorySheet";
 import { sourceInstant } from "./dates.js";
 import React from "react";
 import { BottomSheet, Sparkline } from "./components";
@@ -13,7 +14,7 @@ function shortDate(input) {
   if (!instant) return "—";
   const date = new Date(instant);
   if (!Number.isFinite(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en", { timeZone: "Asia/Bangkok", month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en", { timeZone: "Asia/Bangkok", month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 function exerciseChange(sessions = []) {
   const points = sessions.map((item) => finiteNumber(item.best_estimated_1rm_kg)).filter((item) => item != null && item > 0);
@@ -35,15 +36,17 @@ export function ExerciseDetailSheet({ exercise, onClose }) {
     </div>
     {values.length > 1 ? <div className="detail-chart"><Sparkline values={values} /></div> : null}
     <div className={`coach-note ${flat ? "orange" : ""}`}><Icon name={flat ? "info" : "sparkle"} size={19} /><div><strong>{values.length < 2 ? "Building history" : flat ? "Recent estimates are similar" : "Observed estimate trend"}</strong><span>{values.length < 2 ? "Two recorded sessions are needed to draw a trend." : "Changes in reps, effort, technique, and recovery affect this estimate. Use a current recovery check-in and verified routine history before adjusting targets."}</span></div></div>
-    <div className="session-list"><strong className="list-heading">Recent sessions</strong>{sessions.length ? sessions.slice().reverse().slice(0, 6).map((session, index) => {
+    <div className="session-list"><strong className="list-heading">All returned sessions · {sessions.length}</strong>{sessions.length ? sessions.slice().reverse().map((session, index) => {
       const effort = rpeCoverage(session);
       const estimate = finiteNumber(session.best_estimated_1rm_kg);
       const weight = finiteNumber(session.best_set?.weight_kg);
       return <div className="session-row" key={`${session.workout_id || sessionDate(session) || index}-${index}`}>
         <span><strong>{shortDate(sessionDate(session))}</strong><small>{weight == null ? "No loaded top set" : `${weight} kg × ${value(session.best_set?.reps)}`}</small></span>
         <span><strong>{estimate == null || estimate <= 0 ? "—" : `${estimate.toFixed(1)} kg`}</strong><small>{effort.average == null ? "RPE unknown" : `Avg RPE ${effort.average.toFixed(1)}`} · {effort.percent == null ? "coverage unknown" : `${Math.round(effort.percent)}% coverage`}</small></span>
+        <details className="history-set-detail"><summary>Working-set records</summary><WorkingSetRecords session={session} /></details>
       </div>;
     }) : <div className="empty-state compact">No completed sessions in this range.</div>}</div>
+    <button type="button" className="secondary-button full" onClick={onClose}>Back</button>
   </BottomSheet>;
 }
 

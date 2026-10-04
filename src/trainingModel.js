@@ -253,3 +253,12 @@ export function buildRoutinePayload(detail, recommendation, create = false) {
     })),
   };
 }
+
+// A refreshed response timestamp or temporary cache state must not erase an edit.
+// Genuine routine/evidence, goal, or applied-check-in changes invalidate the draft.
+export function trainingDraftContext({ selected, routine, payload, settings, recovery }) {
+  return JSON.stringify({ selected, routine, settings,
+    evidence: { freshness: payload?.recap?.freshness, summary: payload?.recap?.summary, records: payload?.recap?.evidence, exercises: payload?.exercise_progress },
+    checkIn: { input: recovery?.input, appliedAt: recovery?.appliedAt, contextKey: recovery?.contextKey },
+  });
+}

@@ -29,10 +29,10 @@ test("all five screenshot rows resolve distinct real history routes", async () =
     assert.ok(html.includes("Bangkok time"));
   }
   assert.equal(historyMetric("Resting HR"), "Resting heart rate");
-  assert.equal(historyMetric("HRV"), null);
+  assert.equal(historyMetric("HRV"), "HRV");
   const source = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   assert.ok(source.includes('openMetric={openHealthMetric}'));
-  assert.ok(source.includes('type: "metric-history", metric: name'));
+  assert.ok(source.includes('type: "metric-history", metric: name, tab'));
   assert.ok(!source.includes('metric.label === "Resting heart rate" ? "HRV"'));
 });
 
@@ -101,7 +101,7 @@ test("period and Back/Close callbacks remain controlled across repeated openings
     const content = tree.props.children;
     const children = React.Children.toArray(content.props.children);
     children.find(child => child.props.onChange)?.props.onChange("30D");
-    children.find(child => child.props.children === "Back to Health metrics").props.onClick();
+    children.find(child => child.type === "button" && child.props.className === "secondary-button full").props.onClick();
     assert.equal(range, "30D");
   }
   assert.equal(closes, 2);

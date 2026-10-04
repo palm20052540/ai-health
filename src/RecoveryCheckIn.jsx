@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { EMPTY_CHECK_IN, loadRecovery, validateCheckIn } from './recoveryModel';
 import { formatGeneratedAt } from './portalData';
 
-export function RecoveryCheckIn({ recovery, onApply, applying, error, settings, openGoals }) {
-  const [draft, setDraft] = useState(() => loadRecovery()?.input || { ...EMPTY_CHECK_IN });
+export function RecoveryCheckIn({ recovery, onApply, applying, error, settings, openGoals, storage }) {
+  const [draft, setDraft] = useState(() => loadRecovery(storage)?.input || { ...EMPTY_CHECK_IN });
   const [validation, setValidation] = useState('');
   const dirty = JSON.stringify(draft) !== JSON.stringify(recovery?.input);
   const update = (key, value) => { setDraft((current) => ({ ...current, [key]: value })); setValidation(''); };

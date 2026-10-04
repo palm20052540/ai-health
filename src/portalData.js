@@ -7,11 +7,19 @@ export function daysForRange(range) {
 async function request(path, init = {}) {
   const response = await fetch(path, {
     ...init,
+    cache: "no-store",
     headers: { "Content-Type": "application/json", ...(init.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+  if (!response.ok) {
+    if ([401, 403].includes(response.status) && typeof window !== "undefined") globalThis.dispatchEvent(new Event("tong-fit:auth-failed"));
+    throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+  }
   return body;
+}
+
+export function fetchOwnerSession(signal) {
+  return request("/api/session", { signal });
 }
 
 export function fetchDashboard(days, signal) {
@@ -79,5 +87,5 @@ export function dashboardDataState(payload, loadState = {}) {
   if (isSamplePayload(payload)) return 'sample';
   if (!payload) return loadState.status || 'missing';
   if (!payload.recap || !Number.isFinite(Date.parse(payload.generated_at || ''))) return 'missing';
-  return loadState.error ? 'stale' : 'live';
+  return loadState.error || loadState.status === 'stale' ? 'stale' : 'live';
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { cachedBrief, briefCacheExpired } from "./briefCache.js";
 import { BRIEF_THEMES, RATING_LABELS } from "./dailyBrief";
 
 const STATES = ["ready", "missing", "stale", "unavailable"];
@@ -40,7 +41,10 @@ export function normalizeSavedBrief(value, kind) {
 export async function fetchSavedBrief(kind, signal, fetchImpl = fetch) {
   if (!["daily", "training"].includes(kind)) throw new Error("Invalid saved summary kind");
   const response = await fetchImpl(`/api/assistant-briefs?kind=${kind}`, { method: "GET", signal, cache: "no-store" });
-  if (!response.ok) throw new Error("Saved summary unavailable");
+  if (!response.ok) {
+    if ([401, 403].includes(response.status) && typeof window !== "undefined") globalThis.dispatchEvent(new Event("tong-fit:auth-failed"));
+    throw Object.assign(new Error("Saved summary unavailable"), { status: response.status });
+  }
   return normalizeSavedBrief(await response.json(), kind);
 }
 
@@ -52,28 +56,31 @@ export function expireSavedBrief(brief, now = Date.now()) {
   return brief;
 }
 
-export function useSavedAssistantBrief(kind, refreshKey = 0, enabled = true) {
+export function useSavedAssistantBrief(kind, refreshKey = 0, enabled = true, disabledStatus = "sample") {
   const [result, setResult] = useState(null);
+  const [tick, setTick] = useState(0);
   const requestKey = useMemo(() => ({ kind, refreshKey, enabled }), [kind, refreshKey, enabled]);
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
     let active = true;
     const timer = setTimeout(() => controller.abort(), 12000);
-    fetchSavedBrief(kind, controller.signal).then((brief) => {
+    cachedBrief(kind, fetchSavedBrief).then((brief) => {
       if (active) setResult({ key: requestKey, brief });
     }).catch(() => {
       if (active) setResult({ key: requestKey, brief: { ...EMPTY_BRIEF, status: "unavailable" } });
     }).finally(() => clearTimeout(timer));
     return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [requestKey]);
-  if (!enabled) return { ...EMPTY_BRIEF, status: "sample" };
+  }, [requestKey, tick]);
+  useEffect(() => { const timer = setInterval(() => setTick((value) => value + 1), 10000); return () => clearInterval(timer); }, []);
+  void tick;
+  if (!enabled) return { ...EMPTY_BRIEF, status: disabledStatus };
   // Hide a previous request's result immediately, even before the effect runs.
-  return result?.key === requestKey ? expireSavedBrief(result.brief) : EMPTY_BRIEF;
+  return result?.key === requestKey ? briefCacheExpired(result.brief) ? { ...EMPTY_BRIEF, status: "stale" } : expireSavedBrief(result.brief) : EMPTY_BRIEF;
 }
 
 export function SavedBriefStatus({ brief, fallback = false }) {
-  return <p className="brief-status" role="status">{STATUS_COPY[brief?.status] || STATUS_COPY.unavailable}{fallback ? " The six themes below use the current rules-based evidence." : ""}</p>;
+  return <p className="brief-status" role="status">{STATUS_COPY[brief?.status] || STATUS_COPY.unavailable}{brief?.cacheHit ? " Reused from this page’s private cache (checked less than half a minute ago)." : ""}{fallback ? " The six themes below use the current rules-based evidence." : ""}</p>;
 }
 
 function formatSavedAt(value) {
@@ -110,8 +117,8 @@ export function RecoveryMorningBriefContent({ brief = EMPTY_BRIEF }) {
   </section>;
 }
 
-export function RecoveryMorningBrief({ refreshKey, enabled = true }) {
-  const brief = useSavedAssistantBrief("daily", refreshKey, enabled);
+export function RecoveryMorningBrief({ refreshKey, enabled = true, disabledStatus = "sample" }) {
+  const brief = useSavedAssistantBrief("daily", refreshKey, enabled, disabledStatus);
   return <RecoveryMorningBriefContent brief={brief} />;
 }
 
@@ -127,8 +134,8 @@ export function SavedTrainingBriefContent({ brief = EMPTY_BRIEF }) {
   </section>;
 }
 
-export function SavedTrainingBrief({ refreshKey, enabled = true }) {
-  const brief = useSavedAssistantBrief("training", refreshKey, enabled);
+export function SavedTrainingBrief({ refreshKey, enabled = true, disabledStatus = "sample" }) {
+  const brief = useSavedAssistantBrief("training", refreshKey, enabled, disabledStatus);
   return <SavedTrainingBriefContent brief={brief} />;
 }
 

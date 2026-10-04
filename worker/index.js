@@ -48,7 +48,7 @@ async function upstream(env, path, init = {}) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 402) throw new Error("Supabase usage limit reached; live data will resume when service is restored");
-    throw new Error(payload?.error || payload?.message || `Health API returned ${response.status}`);
+    throw Object.assign(new Error(payload?.error || payload?.message || `Health API returned ${response.status}`), { status: response.status });
   }
   return payload;
 }
@@ -71,9 +71,10 @@ export default {
     if (!authorizeSiteVisitor(request, env)) return json({ error: "Forbidden" }, 403);
 
     try {
+      // Every data request must retain the current trusted owner identity.
+      if (request.method === "GET" && url.pathname === "/api/session") return json({ ownerId: briefPrincipal(request, env) });
       if (request.method === "GET" && url.pathname === "/api/assistant-briefs") {
-        const ownerId = briefPrincipal(request, env);
-        return json(await readSavedReport(env, ownerId, url.searchParams.get("kind"), readDashboard));
+        return json(await readSavedReport(env, briefPrincipal(request, env), url.searchParams.get("kind"), readDashboard));
       }
       if (request.method === "POST" && ["/api/health-brief", "/api/coach"].includes(url.pathname)) {
         const body = await readBoundedJson(request);
@@ -82,7 +83,7 @@ export default {
         return json(url.pathname === "/api/coach" ? toLegacyCoach(result) : result);
       }
       const healthRoutes = ["/api/dashboard", "/api/sync", "/api/status", "/api/routines"];
-      if (healthRoutes.includes(url.pathname) || url.pathname.startsWith("/api/routines/")) requireConfig(env);
+      if (healthRoutes.includes(url.pathname) || url.pathname.startsWith("/api/routines/")) { briefPrincipal(request, env); requireConfig(env); }
       if (request.method === "GET" && url.pathname === "/api/dashboard") {
         const requestedDays = Number(url.searchParams.get("days") || 30);
         const days = Math.min(Math.max(Number.isFinite(requestedDays) ? requestedDays : 30, 1), 365);

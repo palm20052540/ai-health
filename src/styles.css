@@ -492,3 +492,15 @@ button:disabled { cursor: wait; opacity: .6; }
 .history-record .history-missing { color: var(--muted); font-size: .875rem; font-weight: 500; }
 .metric-history .secondary-button { font-size: .9375rem; }
 @media (max-width: 350px) { .history-record { grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; } }
+
+.cache-status { margin: 10px 0; font-size: .875rem; color: var(--muted); line-height: 1.5; }
+.cache-status button { display: inline-block; margin-left: 8px; min-height: 44px; }
+.history-entry { margin-bottom: 16px; font-size: .9375rem; }
+.history-session-button { width: 100%; padding: 16px 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.history-session-button strong, .history-session-button time, .history-session-button small { display: block; }
+.history-session-button strong { font-size: 1rem; }.history-session-button time, .history-session-button small { margin-top: 5px; font-size: .875rem; color: var(--muted); }
+.history-session-button > span:last-child { color: var(--blue); font-size: .875rem; flex: 0 0 64px; }
+.history-exercise { padding: 12px 0; border-bottom: 1px solid var(--line); }.history-exercise h4 { font-size: 1rem; }
+.working-records { padding: 0; list-style: none; }.working-records li { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0; font-size: .875rem; border-bottom: 1px solid var(--line); }.working-records strong { width: 100%; }
+.history-set-detail { grid-column: 1 / -1; text-align: left; }.history-set-detail summary { min-height: 44px; padding-top: 10px; font-size: .875rem; cursor: pointer; }
+.app-shell[hidden] { display: none !important; }

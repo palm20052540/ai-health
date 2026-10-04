@@ -49,22 +49,22 @@ function mergeSettings(saved = {}) {
   };
 }
 
-export function loadSettings() {
+export function loadSettings(storage = globalThis.localStorage) {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    const saved = JSON.parse(storage.getItem(STORAGE_KEY) || "null");
     return mergeSettings(saved || {});
   } catch {
     return defaultSettings;
   }
 }
 
-export function persistSettings(settings) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, version: 1 })); return true; } catch { return false; }
+export function persistSettings(settings, storage = globalThis.localStorage) {
+  try { storage.setItem(STORAGE_KEY, JSON.stringify({ ...settings, version: 1 })); return true; } catch { return false; }
 }
 
-export function resetSettings() {
+export function resetSettings(storage = globalThis.localStorage) {
   const next = structuredClone(defaultSettings);
-  persistSettings(next);
+  persistSettings(next, storage);
   return next;
 }
 

@@ -151,13 +151,14 @@ test("integration keeps saved reviews refreshable after Sync and leaves existing
   const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
   const daily = await readFile(new URL("../src/DailyBrief.jsx", import.meta.url), "utf8");
   const savedSource = await readFile(new URL("../src/SavedAssistantBrief.jsx", import.meta.url), "utf8");
-  assert.ok(app.includes("setBriefRefreshKey((current) => current + 1)"));
+  assert.ok(app.includes("setBriefRefreshKey((value) => value + 1)"));
   assert.ok(app.includes("result?.assistant_analysis"));
   assert.ok(app.indexOf("<RecoveryCheckIn") < app.indexOf("<RecoveryMorningBrief"));
   assert.ok(app.indexOf("<SavedTrainingBrief") < app.indexOf("<TrainingView"));
   assert.ok(!daily.includes("fetchDailyBrief"));
   assert.ok(!daily.includes("/api/health-brief"));
   assert.ok(!savedSource.includes("/api/health-brief"));
-  assert.ok(!savedSource.includes("setInterval"));
+  assert.ok(savedSource.includes("briefCacheExpired"));
+  assert.ok(app.includes("clearSavedBriefCache"));
   assert.ok(savedSource.includes("controller.abort()"));
 });

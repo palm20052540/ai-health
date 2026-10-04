@@ -7,7 +7,7 @@ import { AssistantSyncStatus, RecoveryMorningBrief, SavedTrainingBrief } from ".
 import { RecoveryCheckIn } from "./RecoveryCheckIn";
 import { buildRecoveryDecision, persistRecovery, recoveryState, sourceFreshness } from "./recoveryModel";
 import { buildLiveView } from "./healthView";
-import { dashboardDataState, daysForRange, fetchDashboard, formatGeneratedAt, syncDashboard, syncMessage } from "./portalData";
+import { dashboardDataState, daysForRange, fetchDashboard, fetchOwnerSession, formatGeneratedAt, syncDashboard, syncMessage } from "./portalData";
 import { ExerciseDetailSheet, MuscleDetailSheet, PostWorkoutSheet, RoutineRecommendationSheet } from "./DetailSheets";
 import { PhotoSheet } from "./PhotoSheet";
 import { SettingEditor, SettingsMenu } from "./SettingsSheets";
@@ -15,7 +15,11 @@ import { loadSettings, persistSettings, resetSettings } from "./settings";
 import { ExerciseListSheet, TrainingView, WorkoutTimelineSheet } from "./TrainingView";
 import { resolveTab } from "./navigation";
 import { MetricHistorySheet } from "./MetricHistorySheet";
+import { TrainingHistorySheet } from "./TrainingHistorySheet";
 import { historyMetric } from "./metricHistory.js";
+import { createDashboardCache } from "./dashboardCache.js";
+import { ownerStorage } from "./ownerStorage.js";
+import { clearSavedBriefCache, setBriefCacheOwner } from "./briefCache.js";
 
 function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, payload, settings, dataState, briefRefreshKey }) {
   return <>
@@ -30,10 +34,10 @@ function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, p
   </>;
 }
 
-function Recovery({ range, setRange, openMetric, view, recovery, onApply, applying, error, settings, openGoals, briefRefreshKey, dataState }) {
+function Recovery({ range, setRange, openMetric, view, recovery, onApply, applying, error, settings, openGoals, briefRefreshKey, dataState, storage }) {
   return <>
-    <RecoveryCheckIn recovery={recovery} onApply={onApply} applying={applying} error={error} settings={settings} openGoals={openGoals} />
-    <RecoveryMorningBrief refreshKey={briefRefreshKey} enabled={dataState !== "sample"} />
+    <RecoveryCheckIn storage={storage} recovery={recovery} onApply={onApply} applying={applying} error={error} settings={settings} openGoals={openGoals} />
+    <RecoveryMorningBrief refreshKey={briefRefreshKey} enabled={dataState === "live"} disabledStatus={dataState === "sample" ? "sample" : "stale"} />
     <section className="list-section"><h2>Recovery evidence</h2></section>
     <RangeControl value={range} onChange={setRange} />
     {view ? <><EvidenceRow items={view.recovery.evidence} onMetric={openMetric} /><TrendChart data={view.recovery.chart} />
@@ -53,10 +57,23 @@ function App() {
   const [sheet, setSheet] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [briefRefreshKey, setBriefRefreshKey] = useState(0);
-  const [cache, setCache] = useState({});
+  const [, setCacheRevision] = useState(0);
+  const [session, setSession] = useState({ status: "checking", ownerId: null });
+  const cacheRef = useRef(null);
+  if (!cacheRef.current) {
+    let storage; try { storage = window.sessionStorage; } catch { /* Memory-only fallback. */ }
+    cacheRef.current = createDashboardCache({ fetcher: fetchDashboard, storage, onChange: () => setCacheRevision((value) => value + 1), onAuthFailure: () => lockPrivate() });
+  }
+  const snapshots = cacheRef.current;
+  const sourceKeys = useRef(new Map());
+  const verifyRef = useRef(null);
+  const verifiedOwnerRef = useRef(null);
+  const preferencesRef = useRef(null);
+  const focusRestoreRef = useRef(null);
+  const activeDaysRef = useRef(30);
+  const sessionRef = useRef(session); sessionRef.current = session;
+  const sessionGeneration = useRef(0);
   const [now, setNow] = useState(Date.now);
-  const [loadStates, setLoadStates] = useState({});
-  const requests = useRef(new Map());
   const [appliedRecovery, setAppliedRecovery] = useState(null);
   const [applyingRecovery, setApplyingRecovery] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
@@ -65,31 +82,54 @@ function App() {
   const latestSettings = useRef(settings);
   latestSettings.current = settings;
   const activeDays = daysForRange(ranges[tab]);
-  const payload = cache[activeDays];
-  const loadState = loadStates[activeDays] || { status: 'loading', error: null };
+  activeDaysRef.current = activeDays;
+  const loadState = snapshots.read(activeDays);
+  const payload = loadState.payload;
   const dataState = dashboardDataState(payload, loadState);
-  const personalPayload = ['sample', 'missing'].includes(dataState) ? null : payload;
-  const recovery = recoveryState(appliedRecovery, cache[28], settings, now);
+  const personalPayload = ['sample', 'missing', 'unavailable'].includes(dataState) ? null : payload;
+  const recoveryEvidence = snapshots.read(28);
+  const evaluatedRecovery = recoveryState(appliedRecovery, recoveryEvidence.payload, settings, now);
+  const recovery = ["live", "cached"].includes(recoveryEvidence.status) && !syncing ? evaluatedRecovery : { ...evaluatedRecovery, stale: true, decision: "unknown" };
   const view = useMemo(() => personalPayload ? buildLiveView(personalPayload, settings) : null, [personalPayload, settings]);
   const metric = useMemo(() => typeof sheet === "string" ? metricDetails[sheet] : null, [sheet]);
 
-  const load = (days, { force = false } = {}) => {
-    if (requests.current.has(days)) {
-      const pending = requests.current.get(days);
-      return force ? pending.catch(() => {}).then(() => load(days, { force: true })) : pending;
-    }
-    if (!force && cache[days]) return Promise.resolve(cache[days]);
-    setLoadStates((current) => ({ ...current, [days]: { status: 'loading', error: null } }));
-    const task = fetchDashboard(days).then((result) => {
-      setCache((current) => ({ ...current, [days]: result }));
-      setLoadStates((current) => ({ ...current, [days]: { status: 'live', error: null } }));
-      return result;
-    }).catch((error) => {
-      setLoadStates((current) => ({ ...current, [days]: { status: 'unavailable', error: error instanceof Error ? error.message : 'Data connection unavailable' } }));
-      throw error;
-    }).finally(() => requests.current.delete(days));
-    requests.current.set(days, task);
-    return task;
+  const invalidateBriefs = () => { clearSavedBriefCache(); setBriefRefreshKey((value) => value + 1); };
+  const lockPrivate = () => {
+    sessionGeneration.current++; verifiedOwnerRef.current = null; snapshots.lock(); setBriefCacheOwner(null); sourceKeys.current.clear();
+    setSession({ status: "unavailable", ownerId: null }); setAppliedRecovery(null); setSheet(null); invalidateBriefs();
+  };
+  const load = async (days, options = {}) => {
+    const result = await snapshots.load(days, options);
+    const key = JSON.stringify([result?.recap?.freshness, result?.recap?.summary, result?.recap?.evidence]);
+    if (sourceKeys.current.has(days) && sourceKeys.current.get(days) !== key) { setAppliedRecovery(null); invalidateBriefs(); }
+    sourceKeys.current.set(days, key);
+    return result;
+  };
+  const verifySession = () => {
+    if (verifyRef.current) return verifyRef.current;
+    const generation = sessionGeneration.current;
+    focusRestoreRef.current = document.activeElement;
+    setSession((current) => ({ ...current, status: "checking" }));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const promise = fetchOwnerSession(controller.signal).then((result) => {
+      if (generation !== sessionGeneration.current) return;
+      if (typeof result.ownerId !== "string" || !result.ownerId.trim()) throw new Error("Owner identity unavailable");
+      if (verifiedOwnerRef.current && verifiedOwnerRef.current !== result.ownerId) { sessionGeneration.current++; setAppliedRecovery(null); setSheet(null); sourceKeys.current.clear(); invalidateBriefs(); }
+      if (verifiedOwnerRef.current !== result.ownerId) {
+        let storage; try { storage = window.localStorage; } catch { /* Private memory-only preferences. */ }
+        preferencesRef.current = ownerStorage(result.ownerId, storage || null); setSettings(loadSettings(preferencesRef.current));
+      }
+      verifiedOwnerRef.current = result.ownerId;
+      snapshots.activate(result.ownerId); setBriefCacheOwner(result.ownerId);
+      setSession({ status: "ready", ownerId: result.ownerId });
+      requestAnimationFrame(() => { if (focusRestoreRef.current?.isConnected) focusRestoreRef.current.focus?.(); });
+      // Cached records can render immediately; their authority is renewed separately.
+      load(activeDaysRef.current, { force: true }).catch(() => {});
+      if (activeDaysRef.current !== 28) load(28, { force: true }).catch(() => {});
+    }).catch(() => { if (generation === sessionGeneration.current) lockPrivate(); })
+      .finally(() => { clearTimeout(timeout); verifyRef.current = null; });
+    verifyRef.current = promise; return promise;
   };
 
   const applyRecovery = async (input) => {
@@ -97,10 +137,12 @@ function App() {
     applyingRef.current = true;
     setApplyingRecovery(true); setRecoveryError('');
     try {
+      const generation = sessionGeneration.current;
       const fresh = await load(28, { force: true });
+      if (generation !== sessionGeneration.current || syncRef.current) return;
       const result = buildRecoveryDecision(fresh, latestSettings.current, input);
       setAppliedRecovery(result);
-      if (!persistRecovery(result)) setRecoveryError('Recommendation updated, but this browser could not save the check-in inputs.');
+      if (!persistRecovery(result, preferencesRef.current)) setRecoveryError('Recommendation updated, but this browser could not save the check-in inputs.');
     } catch {
       // Never retain a green decision after a failed evidence refresh.
       setAppliedRecovery(null);
@@ -108,8 +150,25 @@ function App() {
     } finally { applyingRef.current = false; setApplyingRecovery(false); }
   };
 
-  useEffect(() => { load(activeDays).catch(() => {}); }, [activeDays]);
-  useEffect(() => { load(28).catch(() => {}); const timer = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
+  useEffect(() => { if (session.status === "ready") load(activeDays).catch(() => {}); }, [activeDays, session.status]);
+  useEffect(() => {
+    verifySession();
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      if (document.visibilityState === "visible" && sessionRef.current.status === "ready" && !syncRef.current) {
+        for (const days of new Set([activeDaysRef.current, 28])) {
+          const cached = snapshots.read(days);
+          if (cached.status === "stale" && !cached.error && !cached.refreshing) load(days, { force: true }).catch(() => {});
+        }
+      }
+    }, 10000);
+    const focus = () => { if (document.visibilityState === "visible") verifySession(); };
+    const hide = () => setSession((current) => ({ ...current, status: "checking" }));
+    const authFailure = () => lockPrivate();
+    globalThis.addEventListener("focus", focus); globalThis.addEventListener("pageshow", focus); globalThis.addEventListener("pagehide", hide);
+    document.addEventListener("visibilitychange", focus); globalThis.addEventListener("tong-fit:auth-failed", authFailure);
+    return () => { clearInterval(timer); globalThis.removeEventListener("focus", focus); globalThis.removeEventListener("pageshow", focus); globalThis.removeEventListener("pagehide", hide); document.removeEventListener("visibilitychange", focus); globalThis.removeEventListener("tong-fit:auth-failed", authFailure); };
+  }, []);
   useEffect(() => { try { localStorage.setItem("tong-fit:last-tab", tab); } catch { /* Browser storage can be unavailable; navigation still works. */ } }, [tab]);
 
   const selectTab = (next) => {
@@ -118,55 +177,60 @@ function App() {
   };
   const setRange = (range) => setRanges((current) => ({ ...current, [tab]: range }));
   const openHealthMetric = (label) => {
+    if (label === "Recent training load") { setSheet({ type: "training-history", tab }); return; }
     const name = historyMetric(label);
-    setSheet(name ? { type: "metric-history", metric: name } : label);
+    setSheet(name ? { type: "metric-history", metric: name, tab } : label);
   };
   const saveSettings = (section, draft) => {
     const next = { ...settings, [section]: draft };
-    setSettings(next);
-    const persisted = persistSettings(next);
+    setSettings(next); setAppliedRecovery(null); invalidateBriefs();
+    const persisted = persistSettings(next, preferencesRef.current);
     const labels = { goals: "Goals", training: "Training preferences", personal: "Personal context", analytics: "Analytics", physique: "Goal physique" };
     setSheet({ type: "settings", notice: persisted ? `${labels[section]} saved on this browser. Update Recovery to apply the new context.` : `${labels[section]} updated for this session only; browser storage is unavailable.` });
   };
   const resetAllSettings = () => {
-    const next = resetSettings();
-    setSettings(next);
+    const next = resetSettings(preferencesRef.current);
+    setSettings(next); setAppliedRecovery(null); invalidateBriefs();
     setSheet({ type: "settings", notice: "Settings restored to defaults." });
   };
   const sync = async () => {
     if (syncRef.current) return;
     syncRef.current = true; setSyncing(true);
+    snapshots.invalidate(); sourceKeys.current.clear(); setAppliedRecovery(null); setSheet(null); invalidateBriefs();
     let assistantAnalysis = null;
     try {
       const result = await syncDashboard();
       assistantAnalysis = result?.assistant_analysis;
-      setBriefRefreshKey((current) => current + 1);
-      await Promise.allSettled([...requests.current.values()]);
-      setCache({});
-      setAppliedRecovery(null);
-      await Promise.all([load(activeDays, { force: true }), load(28, { force: true })]);
+      snapshots.invalidate(); invalidateBriefs();
+      await Promise.all([...new Set([activeDaysRef.current, 28])].map((days) => load(days, { force: true })));
       setSheet({ type: "synced", message: syncMessage(result), assistantAnalysis });
     } catch (error) {
+      snapshots.markUnavailable("Sync did not confirm fresh data. Refresh the view to check existing source records.");
+      setAppliedRecovery(null); invalidateBriefs();
       setSheet({ type: "sync-error", message: error instanceof Error ? error.message : "Sync could not be completed", assistantAnalysis });
     } finally { syncRef.current = false; setSyncing(false); }
   };
   const recommendation = view?.training.recommendation;
-  const status = dataState === "live" ? "Live data" : dataState === "stale" ? "Cached data" : dataState === "sample" ? "Sample data" : loadState.status === "loading" ? "Loading data" : "Data unavailable";
+  const status = loadState.status === "cached" ? "Cached data" : dataState === "live" ? "Live data" : dataState === "stale" ? "Cached data" : dataState === "sample" ? "Sample data" : loadState.status === "loading" ? "Loading data" : "Data unavailable";
 
-  return <div className="app-shell">
+  if (session.status === "unavailable" || (!verifiedOwnerRef.current && session.status !== "ready")) return <div className="app-shell"><main><h1>ต๊อง Fit</h1><p role="status">{session.status === "checking" ? "Checking private access…" : "Private data is locked. Check your sign-in and try again."}</p>{session.status === "unavailable" ? <button type="button" className="primary-button" onClick={verifySession}>Try again</button> : null}</main></div>;
+
+  return <>{session.status === "checking" ? <div className="app-shell"><main><p role="status">Checking private access…</p></main></div> : null}<div key={session.ownerId} className="app-shell" hidden={session.status !== "ready"} inert={session.status !== "ready"}>
     <a className="skip-link" href="#main-content">Skip to main content</a>
     <main id="main-content" tabIndex="-1" className={tab === "Training" ? "training-mode" : ""}>
       <Header syncing={syncing} onSync={sync} onSettings={() => setSheet({ type: "settings" })} status={status} lastSynced={view ? formatGeneratedAt(view.lastSynced) : null} />
-      {loadState.error ? <div className="data-note" role="status"><strong>{payload ? "Showing older cached measurements." : "Source data unavailable."}</strong> {loadState.error}</div> : null}
+      {loadState.storedAt ? <p className="cache-status" role="status">{loadState.status === "live" ? "Source checked" : "Private cached snapshot"} {Math.max(0, Math.floor((now - loadState.storedAt) / 1000))}s ago{loadState.refreshing ? " · refreshing…" : ""}. Measurements keep their own source dates.{loadState.status === "stale" ? " Read-only until refreshed." : ""}<button type="button" className="text-button" disabled={loadState.refreshing || syncing} onClick={() => load(activeDays, { force: true }).catch(() => {})}>Refresh view</button></p> : null}
+      {loadState.error ? <div className="data-note" role="status"><strong>{payload ? "Showing older cached measurements." : "Source data unavailable."}</strong> {loadState.error}{!payload ? <button type="button" className="text-button" onClick={() => load(activeDays, { force: true }).catch(() => {})}>Refresh view</button> : null}</div> : null}
       {dataState === "sample" ? <div className="data-note" role="status">Sample snapshot received. Personal assessments and recommendations are withheld.</div> : null}
       <h1>{tab}</h1>
       {tab === "Health" ? <Health range={ranges.Health} setRange={setRange} openMetric={openHealthMetric} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} payload={payload} settings={settings} dataState={dataState} briefRefreshKey={briefRefreshKey} /> : null}
-      {tab === "Recovery" ? <Recovery range={ranges.Recovery} setRange={setRange} openMetric={setSheet} view={view} recovery={recovery} onApply={applyRecovery} applying={applyingRecovery} error={recoveryError} settings={settings} openGoals={() => setSheet({ type: "setting", section: "goals" })} briefRefreshKey={briefRefreshKey} dataState={dataState} /> : null}
-      {tab === "Training" ? <><SavedTrainingBrief refreshKey={briefRefreshKey} enabled={dataState !== "sample"} /><TrainingView range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /></> : null}
+      {tab === "Recovery" ? <Recovery storage={preferencesRef.current} range={ranges.Recovery} setRange={setRange} openMetric={openHealthMetric} view={view} recovery={recovery} onApply={applyRecovery} applying={applyingRecovery} error={recoveryError} settings={settings} openGoals={() => setSheet({ type: "setting", section: "goals" })} briefRefreshKey={briefRefreshKey} dataState={dataState} /> : null}
+      {tab === "Training" ? <><SavedTrainingBrief refreshKey={briefRefreshKey} enabled={dataState === "live"} disabledStatus={dataState === "sample" ? "sample" : "stale"} /><TrainingView openHistory={() => setSheet({ type: "training-history", tab: "Training" })} range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /></> : null}
       <SourceStatus payload={payload} />
     </main>
     <BottomNav active={tab} onChange={selectTab} />
-    {sheet?.type === "metric-history" ? <MetricHistorySheet metric={sheet.metric} payload={personalPayload} range={ranges.Health} dataState={loadState.status === "loading" ? "loading" : dataState} onRangeChange={(range) => setRanges((current) => ({ ...current, Health: range }))} onClose={() => setSheet(null)} /> : null}
+    {sheet?.type === "metric-history" ? <MetricHistorySheet metric={sheet.metric} payload={personalPayload} range={ranges[sheet.tab || "Health"]} returnTab={sheet.tab || "Health"} dataState={dataState} onRangeChange={(range) => setRanges((current) => ({ ...current, [sheet.tab || "Health"]: range }))} onClose={() => setSheet(null)} /> : null}
+    {sheet?.type === "training-history" ? <TrainingHistorySheet payload={personalPayload} range={ranges[sheet.tab]} dataState={dataState} returnTab={sheet.tab} onRangeChange={(range) => setRanges((current) => ({ ...current, [sheet.tab]: range }))} onClose={() => setSheet(null)} /> : null}
     {metric ? <BottomSheet title={metric.title} onClose={() => setSheet(null)}><p className="sheet-lead">{metric.body}</p><div className="method-block"><strong>How it’s calculated</strong><p>{metric.method}</p></div><p className="coverage">{view ? `Coverage: ${view.coverage.activity_complete_days || 0} activity days · ${view.coverage.sleep_nights || 0} sleep nights` : "Coverage unavailable"}</p></BottomSheet> : null}
     {sheet?.type === "settings" ? <SettingsMenu settings={settings} notice={sheet.notice} onEdit={(section) => setSheet({ type: "setting", section })} onReset={resetAllSettings} onClose={() => setSheet(null)} /> : null}
     {sheet?.type === "setting" ? <SettingEditor section={sheet.section} settings={settings} onSave={saveSettings} onClose={() => setSheet({ type: "settings" })} openPhotos={() => setSheet({ type: "photos" })} /> : null}
@@ -179,7 +243,7 @@ function App() {
     {sheet?.type === "recommendation" ? <RoutineRecommendationSheet recommendation={recommendation || { exercise: "No recommendation", load: null, reps: "—", targetRpe: settings.training.targetRpe, currentLoad: null, explanation: "Current source data is unavailable." }} onClose={() => setSheet(sheet.returnTo || null)} /> : null}
     {sheet?.type === "synced" ? <BottomSheet title="Sync result" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><AssistantSyncStatus analysis={sheet.assistantAnalysis} /><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
     {sheet?.type === "sync-error" ? <BottomSheet title="Sync needs attention" onClose={() => setSheet(null)}><p className="sheet-lead">{sheet.message}</p><AssistantSyncStatus analysis={sheet.assistantAnalysis} /><button type="button" className="primary-button full" onClick={() => setSheet(null)}>Done</button></BottomSheet> : null}
-  </div>;
+  </div></>;
 }
 
 export default App;

@@ -3,6 +3,7 @@ import { finiteNumber } from "./recoveryModel.js";
 import { daysForRange, isSamplePayload } from "./portalData.js";
 
 export const HEALTH_HISTORY = {
+  HRV: { source: "Google Health", type: "daily-heart-rate-variability", unit: "ms" },
   Sleep: { source: "Google Health", type: "sleep", unit: "min" },
   Steps: { source: "Google Health", field: "steps", unit: "steps" },
   "Resting heart rate": { source: "Google Health", type: "daily-resting-heart-rate", unit: "bpm" },
@@ -11,7 +12,8 @@ export const HEALTH_HISTORY = {
 };
 
 export function historyMetric(label) {
-  const name = label === "Resting HR" ? "Resting heart rate" : label;
+  const aliases = { "Resting HR": "Resting heart rate", "Sleep consistency": "Sleep", "HRV baseline": "HRV" };
+  const name = aliases[label] || label;
   return Object.hasOwn(HEALTH_HISTORY, name) ? name : null;
 }
 
@@ -31,7 +33,7 @@ export function historyValue(value, metric) {
     return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   }
   const unit = HEALTH_HISTORY[metric]?.unit || "";
-  return `${new Intl.NumberFormat("en", { maximumFractionDigits: metric === "Weight" || metric === "Resting heart rate" ? 1 : 0 }).format(parsed)} ${unit}`.trim();
+  return `${new Intl.NumberFormat("en", { maximumFractionDigits: metric === "Weight" || metric === "Resting heart rate" || metric === "HRV" ? 1 : 0 }).format(parsed)} ${unit}`.trim();
 }
 
 export function buildMetricHistory(payload, metric, range = "30D", dataState = "live") {
@@ -55,7 +57,7 @@ export function buildMetricHistory(payload, metric, range = "30D", dataState = "
       return included;
     });
   } else if (config.type) {
-    rows = (Array.isArray(evidence.recovery_daily) ? evidence.recovery_daily : []).filter((row) => row.type === config.type).map((row) => ({ date: row.date, value: row.value, note: metric === "Sleep" ? "Logged sleep record" : "Daily resting measurement" }));
+    rows = (Array.isArray(evidence.recovery_daily) ? evidence.recovery_daily : []).filter((row) => row.type === config.type).map((row) => ({ date: row.date, value: row.value, note: metric === "Sleep" ? "Logged sleep record" : metric === "HRV" ? "Daily HRV measurement" : "Daily resting measurement" }));
   } else {
     rows = (Array.isArray(evidence.activity_daily) ? evidence.activity_daily : []).map((row) => ({ date: row.date, value: row[config.field], note: "Completed calendar day" }));
     const partial = payload.recap?.summary?.activity?.partial_day;

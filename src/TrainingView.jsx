@@ -1,9 +1,10 @@
+import { exerciseHistory } from "./trainingHistory.js";
 import { sourceInstant } from "./dates.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { BottomSheet, Insight, Sparkline } from "./components";
 import { Icon } from "./icons";
 import { fetchRoutine, fetchRoutines } from "./portalData";
-import { buildLatestSessionReview, buildNextSessionPlan, buildProgressCoverage, finiteNumber, PROGRESS_RANGES, routineDetail, routineList, rpeCoverage, sessionDate } from "./trainingModel";
+import { buildLatestSessionReview, buildNextSessionPlan, buildProgressCoverage, finiteNumber, PROGRESS_RANGES, routineDetail, routineList, rpeCoverage, sessionDate, trainingDraftContext } from "./trainingModel";
 
 const MUSCLES = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Other"];
 const TABS = [{ id: "latest", label: "Latest session review" }, { id: "next", label: "Next session plan" }, { id: "progress", label: "Long-term progress" }];
@@ -36,7 +37,7 @@ function EmptyState({ title, children }) {
   return <div className="empty-state compact training-state"><strong>{title}</strong><span>{children}</span></div>;
 }
 
-function LatestSession({ payload, onWorkout }) {
+function LatestSession({ payload, onWorkout, onExercise }) {
   const review = useMemo(() => buildLatestSessionReview(payload), [payload]);
   if (!review.latest) return <EmptyState title="No completed session yet">A real Hevy workout is needed before a session review can be shown.</EmptyState>;
   const { latest, previous, exercises } = review;
@@ -59,7 +60,7 @@ function LatestSession({ payload, onWorkout }) {
       <div className="training-comparison-list">{exercises.length ? exercises.map((exercise) => <article className="training-comparison-row" key={exercise.key}>
         <div><strong>{exercise.name}</strong><span className="training-status-pill">{exercise.previous ? "Same exercise ID" : "Limited comparison"}</span></div>
         <p>{topSet(exercise.current)}</p><small>{exercise.previous ? `Previous: ${topSet(exercise.previous)} · ${dateText(sessionDate(exercise.previous), true)}` : "No verified prior comparison"}</small>
-        <p className="training-coverage">{exercise.narrative}</p>
+        <p className="training-coverage">{exercise.narrative}</p><button type="button" className="text-button" disabled={!exercise.exercise_template_id} onClick={() => onExercise?.(exerciseHistory(payload, exercise.exercise_template_id))}>Exercise history</button>
       </article>) : <EmptyState title="Exercise detail is incomplete">The session total is real. Exercise-level history for this workout is not available in the selected dataset.</EmptyState>}</div>
     </section>
   </>;
@@ -123,7 +124,7 @@ function NextSessionPlan({ payload, settings, recovery, dataState }) {
   }, [selected, retry]);
   const routine = detailState.id === selected && detailState.status === "ready" ? detailState.routine : null;
   const plan = useMemo(() => buildNextSessionPlan({ routine, payload, settings, recovery, dataState }), [routine, payload, settings, recovery, dataState]);
-  const context = JSON.stringify([selected, payload?.generated_at, settings, recovery, dataState]);
+  const context = trainingDraftContext({ selected, routine, payload, settings, recovery });
   return <>
     <Insight tone="orange" icon="dumbbell" title="Choose the routine you’ll actually train" copy="Targets use this routine’s stable exercise IDs, logged effort, your goal, and the recovery check-in you applied." />
     <section className="training-plan-header">
@@ -228,7 +229,7 @@ function LongTermProgress({ payload, view, range, setRange, openExercise, openWo
   </>;
 }
 
-export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recovery, dataState = payload ? "live" : "unavailable", range = "30D", setRange, openExercise, openWorkout, openExerciseList, openTimeline }) {
+export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recovery, dataState = payload ? "live" : "unavailable", range = "30D", setRange, openHistory, openExercise, openWorkout, openExerciseList, openTimeline }) {
   const [tab, setTab] = useState("latest");
   const changeTab = (next) => { setTab(next); if (next === "progress" && !PROGRESS_RANGES.some((item) => item.value === range)) setRange?.("30D"); };
   const onTabKey = (event, index) => {
@@ -239,11 +240,12 @@ export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recover
   };
   return <>
     <div className="training-subtabs" role="tablist" aria-label="Training views">{TABS.map((item, index) => <button type="button" role="tab" id={`training-tab-${item.id}`} aria-controls={`training-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} key={item.id} onKeyDown={(event) => onTabKey(event, index)} onClick={() => changeTab(item.id)}>{item.label}</button>)}</div>
+    <button type="button" className="secondary-button full history-entry" onClick={openHistory}>Browse session history</button>
     {TABS.map((item) => <div key={item.id} role="tabpanel" id={`training-panel-${item.id}`} aria-labelledby={`training-tab-${item.id}`} hidden={tab !== item.id} tabIndex="0">
       {tab === item.id ? <>
         {dataState === "loading" ? <p className="training-coverage" role="status">Loading live training history…</p> : null}
         {dataState === "unavailable" ? <p className="training-coverage" role="status">Live training history is unavailable. Automatic prescriptions are paused.</p> : null}
-        {item.id === "latest" ? <LatestSession payload={payload} onWorkout={openWorkout} /> : null}
+        {item.id === "latest" ? <LatestSession payload={payload} onWorkout={openWorkout} onExercise={openExercise} /> : null}
         {item.id === "next" ? <NextSessionPlan payload={payload} settings={settings} recovery={recovery} dataState={dataState} /> : null}
         {item.id === "progress" ? <LongTermProgress payload={payload} view={view} range={range} setRange={setRange} openExercise={openExercise} openWorkout={openWorkout} openExerciseList={openExerciseList} openTimeline={openTimeline} /> : null}
       </> : null}

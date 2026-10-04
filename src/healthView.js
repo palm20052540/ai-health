@@ -146,7 +146,7 @@ export function buildLiveView(payload, settings) {
       evidence: [
         { label: "HRV", value: hrvLatest == null ? "—" : `${formatNumber(hrvLatest, 1)} ms`, delta: percentFromAverage(hrvLatest, hrvAverage), metric: "HRV" },
         { label: "Sleep", value: formatMinutes(sleep.asleep_minutes?.latest), delta: `${sleep.asleep_minutes?.count || 0} nights` },
-        { label: "Resting HR", value: recovery.resting_heart_rate_bpm?.latest == null ? "—" : `${formatNumber(recovery.resting_heart_rate_bpm.latest, 1)} bpm`, delta: "latest", metric: "HRV" },
+        { label: "Resting HR", value: recovery.resting_heart_rate_bpm?.latest == null ? "—" : `${formatNumber(recovery.resting_heart_rate_bpm.latest, 1)} bpm`, delta: "latest", metric: "Resting heart rate" },
       ],
       chart: {
         title: "Recovery signals",
