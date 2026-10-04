@@ -10,6 +10,12 @@ const previousSecret = `whsec_${Buffer.alloc(24, 71).toString("base64")}`;
 const challenge = "ba61c135-84dc-48cd-b73b-e4730f456abc";
 const verification = () => ({ url: "https://receiver.example.net/callback/synthetic?key=not-a-secret", subscriptionId: "sub_synthetic", secret, event: { type: "verification", challenge } });
 const application = () => ({ ...verification(), event: { eventId: `evt_${"a".repeat(64)}`, name: "training.sync_completed", timestamp: "2026-10-03T15:00:00.000Z", data: { kind: "training", source_hash: "b".repeat(64) }, cursor: null } });
+
+test('new-workout events remain metadata-only and reject accidental health payload fields',async()=>{
+  const input=application();input.event.name='training.workout_completed';input.event.data={kind:'training',workout_id:'synthetic-workout'};
+  const h=harness(reply('{}'));assert.equal((await deliverMcpEvent(input,h.deps)).accepted,true);
+  input.event.data.weight_kg=50;const blocked=harness(reply('{}'));assert.equal((await deliverMcpEvent(input,blocked.deps)).accepted,false);
+});
 const reply = (body = JSON.stringify({ challenge }), headers = "", status = 200) => `HTTP/1.1 ${status} Synthetic\r\nContent-Length: ${Buffer.byteLength(body)}\r\n${headers}\r\n${body}`;
 function harness(response = reply(), options = {}) {
   let now = Date.parse("2026-10-03T15:05:00.000Z"), timerCallback;

@@ -5,6 +5,9 @@ import {
 } from "./analytics.ts";
 
 import { handleMcpEventDelivery } from "./webhook.ts";
+import { compactLiveRoutine, readChatTrainingEvidence, sourceId } from "./chatEvidence.ts";
+import { buildChatRecoveryEvidence } from "./chatRecovery.ts";
+import { changeWorkoutSubscription } from "./workoutEvents.ts";
 
 const HEVY_BASE = "https://api.hevyapp.com/v1";
 
@@ -829,6 +832,67 @@ Deno.serve(async (req) => {
     const path = pathAfterFunction(req.url);
     const route = path[0] || "";
     const params = new URL(req.url).searchParams;
+    if (req.method === "POST" && route === "v1" && path[1] === "chat-events" && path.length === 2) {
+      if (caller !== "codex_plugin") return json({ error: "Forbidden" }, 403);
+      const text = await req.text();
+      if (text.length > 12000) return json({ error: "Request too large" }, 413);
+      const body=JSON.parse(text), ownerId=body.ownerId;
+      if (typeof ownerId!=="string" || !ownerId || ownerId.length>256) return json({error:"Invalid owner"},400);
+      // ownerId is asserted by the authenticated Site over its existing server key.
+      // The health account is ALWAYS resolved here, never accepted from the caller.
+      if (body.operation==="subscribe" || body.operation==="unsubscribe") return json(await changeWorkoutSubscription(db,userId,ownerId,body.params,body.operation==="subscribe"));
+      if (!/^evt_[a-f0-9]{64}$/.test(body.eventId||"")) return json({error:"Invalid event"},400);
+      const {data:subscription,error:accessError}=await db.from('hevy_chat_subscriptions').select('id').eq('user_id',userId).eq('site_owner_id',ownerId).gt('expires_at',new Date().toISOString());
+      if(accessError||!subscription?.length)return json({status:'unavailable'});
+      const {data:delivery,error:deliveryError}=await db.from('hevy_chat_deliveries').select('event_id').eq('event_id',body.eventId).in('subscription_id',subscription.map((row:any)=>row.id)).limit(1);
+      if(deliveryError||!delivery?.length)return json({status:'unavailable'});
+      if(body.operation==='read') {
+        const {data:event,error}=await db.from('hevy_chat_events').select('workout_id,chat_status,message_id,occurred_at').eq('user_id',userId).eq('event_id',body.eventId).maybeSingle();
+        if(error||!event)return json({status:'unavailable'});
+        if(event.chat_status==='sent')return json({status:'already_sent',messageId:event.message_id});
+        const {data:complete,error:completeError}=await db.rpc('chat_workout_is_complete',{p_user_id:userId,p_workout_id:event.workout_id});
+        if(completeError||!complete)return json({status:'unavailable'});
+        return json({status:'ready',eventId:body.eventId,occurredAt:event.occurred_at,evidence:await readChatTrainingEvidence(db,userId,event.workout_id,null)});
+      }
+      if(body.operation==='claim') {
+        const {data:event,error:readError}=await db.from('hevy_chat_events').select('workout_id,chat_status,message_id').eq('user_id',userId).eq('event_id',body.eventId).maybeSingle();
+        if(readError||!event)return json({status:'unavailable'});
+        if(event.chat_status==='sent')return json({status:'already_sent',messageId:event.message_id});
+        const current=await readChatTrainingEvidence(db,userId,event.workout_id,null);
+        if(current.dataState!=='live'||current.sourceHash!==body.sourceHash)return json({status:'source_changed',message:'Read current event evidence before claiming.'});
+        const {data,error}=await db.rpc('claim_chat_recap',{p_user_id:userId,p_owner_id:ownerId,p_event_id:body.eventId});
+        if(error)throw new Error('Recap claim unavailable'); return json(data);
+      }
+      if(body.operation==='sent' && /^[a-f0-9-]{36}$/i.test(body.claimToken||'') && typeof body.messageId==='string' && body.messageId.length<=200) {
+        const {data,error}=await db.rpc('mark_chat_recap_sent',{p_user_id:userId,p_owner_id:ownerId,p_event_id:body.eventId,p_claim_token:body.claimToken,p_message_id:body.messageId});
+        if(error)throw new Error('Recap acknowledgement unavailable'); return json({status:data?'sent':'not_confirmed'});
+      }
+      return json({error:'Invalid event operation'},400);
+    }
+    if (req.method === "GET" && route === "v1" && path[1] === "chat-training-evidence" && path.length === 2) {
+      if (caller !== "codex_plugin") return json({ error: "Forbidden" }, 403);
+      const routineId=params.get('routine_id');
+      if(routineId&&!sourceId(routineId))return json({error:'Invalid routine ID'},400);
+      const liveRoutine=routineId?compactLiveRoutine(await hevy(`/routines/${encodeURIComponent(routineId)}`,{signal:AbortSignal.timeout(12000)}),routineId):null;
+      return json(await readChatTrainingEvidence(db, userId, params.get("workout_id"), routineId,Date.now(),liveRoutine));
+    }
+    if(req.method==='GET'&&route==='v1'&&path[1]==='chat-routines'&&path.length===2){
+      if(caller!=='codex_plugin')return json({error:'Forbidden'},403);
+      const routines=[];
+      for(let page=1;page<=10;page++){
+        const result=await hevy(`/routines?page=${page}&pageSize=10`,{signal:AbortSignal.timeout(12000)});
+        if(!Array.isArray(result.routines)||!Number.isInteger(result.page_count)||result.page_count>10)throw new Error('Routine catalog unavailable or too large');
+        routines.push(...result.routines.filter((row:any)=>sourceId(row.id)).map((row:any)=>({id:row.id,title:String(row.title||'Routine').slice(0,100)})));
+        if(page>=result.page_count)break;
+      }
+      return json({routines,source:'Live Hevy routine read',fetchedAt:new Date().toISOString()});
+    }
+    if (req.method === "GET" && route === "v1" && path[1] === "chat-recovery-evidence" && path.length === 2) {
+      if (caller !== "codex_plugin") return json({ error: "Forbidden" }, 403);
+      const { data, error } = await db.rpc("get_chat_recovery_evidence", { p_user_id: userId });
+      if (error) throw new Error("The compact recovery evidence could not be read.");
+      return json(buildChatRecoveryEvidence(data));
+    }
     if (req.method === "POST" && route === "v1" && path[1] === "mcp-event-delivery" && path.length === 2) {
       if (caller !== "codex_plugin") return json({ accepted: false, status: null, errorCode: "forbidden" }, 403);
       return json(await handleMcpEventDelivery(req));

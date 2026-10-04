@@ -61,6 +61,15 @@ export default {
     if (url.pathname === "/mcp") return handleBriefMcp(request, env, {
       readDashboard,
       sendWebhook,
+      chatEvent: (body) => { requireConfig(env); return upstream(env,"/v1/chat-events",{method:"POST",body:JSON.stringify(body)}); },
+      readWorkoutChat: (id) => { requireConfig(env); return upstream(env, `/v1/chat-training-evidence${id ? `?workout_id=${encodeURIComponent(id)}` : ""}`); },
+      readRecoveryChat: () => { requireConfig(env); return upstream(env, "/v1/chat-recovery-evidence"); },
+      listChatRoutines: () => { requireConfig(env); return upstream(env,"/v1/chat-routines"); },
+      readPreworkoutChat: async (id) => {
+        requireConfig(env);
+        const [training,recovery]=await Promise.all([upstream(env,`/v1/chat-training-evidence?routine_id=${encodeURIComponent(id)}`),upstream(env,"/v1/chat-recovery-evidence")]);
+        return {training,recovery,currentChatContextNeeded:["goal","pain and movement limitations","fatigue"],rpeAlreadyLogged:true};
+      },
       refreshDailySources: async () => {
         requireConfig(env);
         const refreshed = await upstream(env, "/v1/sync-missing-data", { method: "POST", body: JSON.stringify({ sources: ["google_health"] }) });

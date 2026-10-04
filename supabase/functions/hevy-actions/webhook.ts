@@ -69,10 +69,13 @@ function validate(value: unknown) {
     if (!keys(event, ["type", "challenge"]) || !text(event.challenge, UUID)) fail("invalid_event");
   } else {
     if (!keys(event, ["eventId", "name", "timestamp", "data", "cursor"]) || !text(event.eventId, ID) ||
-      event.name !== "training.sync_completed" || event.cursor !== null || typeof event.timestamp !== "string" ||
+      !["training.sync_completed","training.workout_completed"].includes(String(event.name)) || event.cursor !== null || typeof event.timestamp !== "string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(event.timestamp) ||
       !Number.isFinite(Date.parse(event.timestamp)) || new Date(event.timestamp).toISOString() !== event.timestamp ||
-      !object(event.data) || !keys(event.data, ["kind", "source_hash"]) || event.data.kind !== "training" || !text(event.data.source_hash, HASH)) fail("invalid_event");
+      !object(event.data) || event.data.kind !== "training") fail("invalid_event");
+    if (event.name === "training.sync_completed") {
+      if (!keys(event.data,["kind","source_hash"]) || !text(event.data.source_hash,HASH)) fail("invalid_event");
+    } else if (!keys(event.data,["kind","workout_id"]) || !text(event.data.workout_id,/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/)) fail("invalid_event");
   }
   const body = JSON.stringify(event);
   if (enc.encode(body).length > MAX_BODY) fail("invalid_event");

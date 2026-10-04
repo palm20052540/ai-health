@@ -1,8 +1,41 @@
 # Tong Fit — Project Master
 
+## Chat-first extension — 4 October 2026
+
+The approved follow-up keeps Supabase and the existing app/history intact. Chat is the primary delivery surface: morning recovery/sleep, a pre-workout plan requested by real Hevy routine name, and one post-workout recap per newly completed import. No app redesign, migration, paid model API, or plan upgrade is included.
+
+New chat training evidence uses the preceding **30 days**, anchored to the specifically selected workout or the pre-workout read time. This is separate from the existing app's fixed 28-day report contract; that validator is unchanged. Reads must use stable exercise IDs, actual logged RPE, explicit working-set semantics, and honest coverage. Missing browser-local goal or check-in context must not be inferred.
+
+This section defines the tested chat extension; native deployment receipts establish its live version. The existing morning task was separately updated to **09:00 Asia/Bangkok**, with chat delivery; no duplicate morning task is intended. Pre-workout is requested in chat by routine name, not scheduled. Existing five-minute Hevy ingestion cadence remains unchanged. Public source and tests contain synthetic fixtures only. Sample coaching prose remains provisional until the user reviews it.
+
+### Narrow source tools
+
+- `get_workout_recap_input`: one specific completed workout, overall working-set totals, every exercise in logged order and actual comparable thirty-day history. No full health dashboard read.
+- `list_training_routines` and `get_preworkout_input`: bounded, on-demand live Hevy routine reads using the already-configured backend access; compact thirty-day history plus recovery. These do not write to Hevy. Missing current goals/check-in/limitations must come from chat rather than being guessed from inaccessible browser storage.
+- `get_morning_recovery_input`: compact sleep, HRV and resting-HR evidence, measurement/sync times and a prior 28-day baseline excluding the latest observation. The existing source refresh runs first; a date/interval must support any “last night” statement.
+- The new chat contract is source evidence, not a saved app recommendation. The app's strict prose validator and 28-day report contract are unchanged.
+
+### Complete-workout event and delivery
+
+The new `training.workout_completed` event contains only the workout ID and kind. A successful Hevy import marker triggers a bounded new-workout queue; the raw workout-header insertion is never used as proof of completion. Normalized exercise/set rows must match the complete source payload. The read-only SQL evidence function is `STABLE`, so completeness and evidence are checked in the same snapshot. Partial targets/history fail closed.
+
+The queue uses private, RLS-enabled service-role-only subscription, event and delivery tables. Native subscription setup verifies the signed callback before storage; no existing callback credentials are manually copied. Activation dates suppress historical/backfill/old-edited sessions. Renewal after expiry discards old queued deliveries. Permanent owner/workout event identity prevents repeated imports from becoming new notifications.
+
+The recovered deployed `sync-hevy-data` source is now tracked. It checks cursor read/success-marker writes, advances the cursor to the run's start with overlap, and drains at most four due events after completion. An unchanged import performs one small queue claim and no report/dashboard/model request. Queue failures, including optional-queue cancellation, cannot roll back source success; a later existing import retries. Signed callback delivery retains bounded DNS-pinned TLS, no redirects, finite retry metadata and subscription revocation/expiry checks.
+
+The assistant reads `get_post_workout_input(eventId)`, composes from that specific snapshot, and calls `claim_post_workout_recap(eventId, sourceHash)` immediately before sending to the authorized private chat. Only `claimed` permits sending. `mark_post_workout_sent` records the actual returned message ID. Callback acceptance is not report delivery. A ten-minute claim prevents concurrent sends; after an uncertain chat result, inspect prior chat delivery before retrying because messaging and database acknowledgement are not one atomic transaction.
+
+### Release and rollback plan
+
+Before release: full tests/lint/SDK checks/native build, read-back review of current deployed functions, source and PROJECT_MASTER synchronization to the original GitHub branch, and owner-private Site publication. Apply the additive migration before the new backend code. Deploy the compatible API first, then importer, then the Site tool proxy. No native post-workout automation is activated until the new tools are discovered and an authenticated read succeeds.
+
+Rollback is non-destructive: stop the new native subscription, restore the prior importer/API/Site versions, and leave private event metadata and source history intact. Disable the new completion trigger if necessary; do not drop data to roll back. No billing, credentials, audience or ingestion-cadence change is included.
+
+Pre-release checks pass **196 synthetic tests**, lint over 36 modules, all six actual-SDK entrypoints, `git diff --check`, and the native Worker/client build. New SQL is executed against an isolated PostgreSQL-compatible test engine, including role denial, complete/partial import, backfill, two-workout batches, failure/cancellation isolation, replay/lease, expiry and reactivation cases. Independent review found and verified fixes for snapshot consistency, routine freshness and source-success isolation. Live native tool reads and new-event activation remain separate release gates; no historical event is sent as a test.
+
 > Canonical product and engineering reference for the Tong Fit AI Health Portal.
 >
-> Last verified: 3 October 2026 (Asia/Bangkok)
+> Last verified: 4 October 2026 (Asia/Bangkok)
 >
 > Branch status: cloud/tong-fit-workflows-20261003 implements the decision-first workflows. Test-then-deploy was authorized on 3 October; see sections 20–21 for release validation and the private assistant-written brief workflow, and the native Sites version for publication status. No GitHub merge is included.
 

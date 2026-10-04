@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.hevy-actions]
 verify_jwt = false
+
+[functions.sync-hevy-data]
+verify_jwt = false

@@ -1,6 +1,7 @@
 import { readBoundedJson } from "./dailyBrief.js";
 import { readReportInput, readSavedReport, saveReport } from "./briefStore.js";
 import { TRAINING_EVENT, subscribeTraining, unsubscribeTraining } from "./briefEvents.js";
+import { CHAT_TOOLS, WORKOUT_EVENT, callChatTool } from "./chatTools.js";
 
 const headers = { "Content-Type": "application/json", "Cache-Control": "private, no-store" };
 const kindSchema = { type: "string", enum: ["daily", "training"] };
@@ -61,14 +62,15 @@ export async function handleBriefMcp(request, env, dependencies) {
   if (body.method === "server/discover") return ok({ ...cacheHints, supportedVersions: ["2026-07-28"], capabilities: { tools: {}, events: {} } });
   if (body.method === "initialize") return ok({ protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "tong-fit-private-briefs", version: "1.0.0" } });
   if (body.method === "ping") return ok({});
-  if (body.method === "tools/list") return ok({ ...cacheHints, tools: BRIEF_TOOLS });
-  if (body.method === "events/list") return ok({ events: [TRAINING_EVENT] });
+  if (body.method === "tools/list") return ok({ ...cacheHints, tools: [...BRIEF_TOOLS,...CHAT_TOOLS] });
+  if (body.method === "events/list") return ok({ events: [TRAINING_EVENT,WORKOUT_EVENT] });
   if (!["tools/call", "events/subscribe", "events/unsubscribe"].includes(body.method)) return rpcError(body.id, -32601, "Method not available.");
   let ownerId;
   try { ownerId = briefPrincipal(request, env); }
   catch (error) { return rpcError(body.id, -32001, error.message, error.status); }
   if (body.method.startsWith("events/")) {
     try {
+      if(body.params?.name===WORKOUT_EVENT.name)return ok(await dependencies.chatEvent({ownerId,operation:body.method==='events/subscribe'?'subscribe':'unsubscribe',params:body.params}));
       return ok(body.method === "events/subscribe" ? await subscribeTraining(env, ownerId, body.params, dependencies.sendWebhook) : await unsubscribeTraining(env, ownerId, body.params));
     } catch (error) {
       return rpcError(body.id, error?.rpcCode || -32603, error?.rpcCode ? error.message : "The subscription operation could not complete.", 200, { reason: error?.reason || "internal_error" });
@@ -76,6 +78,14 @@ export async function handleBriefMcp(request, env, dependencies) {
   }
   const name = body.params?.name;
   const args = body.params?.arguments || {};
+  if (CHAT_TOOLS.some((tool)=>tool.name===name)) {
+    try {
+      const result=await callChatTool(name,args,dependencies,ownerId);
+      return ok({content:[{type:"text",text:JSON.stringify(result)}],structuredContent:result,isError:false});
+    } catch {
+      return ok({content:[{type:"text",text:"The chat evidence request could not complete. Check the requested ID and source availability."}],isError:true});
+    }
+  }
   const tool = BRIEF_TOOLS.find((candidate) => candidate.name === name);
   if (!tool) return rpcError(body.id, -32602, "Unknown tool.");
   const keys = name === "save_brief" ? ["kind", "sourceHash", "report"] : name === "refresh_daily_sources" ? [] : ["kind"];

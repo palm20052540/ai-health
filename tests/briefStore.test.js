@@ -1,4 +1,5 @@
 import test, { after } from "node:test";
+import { CHAT_TOOLS } from "../worker/chatTools.js";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readReportInput, readSavedReport, saveReport } from "../worker/briefStore.js";
@@ -63,7 +64,7 @@ test("MCP discovery is private-data-free while tool calls require both owner ide
   const deps = { readDashboard: async () => { sourceReads++; return fixture(); } };
   const discovery = await handleBriefMcp(request("tools/list", {}, false), config, deps);
   assert.equal(discovery.status, 200); assert.equal(sourceReads, 0);
-  assert.deepEqual((await discovery.json()).result.tools, BRIEF_TOOLS);
+  assert.deepEqual((await discovery.json()).result.tools, [...BRIEF_TOOLS,...CHAT_TOOLS]);
   const denied = await handleBriefMcp(request("tools/call", { name: "get_brief_input", arguments: { kind: "daily" } }, false), config, deps);
   assert.equal(denied.status, 401); assert.equal(sourceReads, 0);
   const other = await handleBriefMcp(request("tools/call", { name: "get_brief_input", arguments: { kind: "daily" } }, true, { "oai-authenticated-user-email": "someone@example.test" }), config, deps);
