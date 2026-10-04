@@ -37,7 +37,10 @@ function signingSecret(value) {
   return value;
 }
 function subscriptionParameters(params, subscribe) {
-  if (!object(params) || Object.keys(params).some((key) => !["name", "arguments", "delivery", "cursor", "ttlMs"].includes(key)) || params.name !== TRAINING_EVENT_NAME || !exact(params.arguments, []) || params.cursor != null) throw error("Unsupported event or arguments.");
+  if (!object(params) || Object.keys(params).some((key) => !["name", "arguments", "delivery", "cursor", "ttlMs", "_meta"].includes(key)) || params.name !== TRAINING_EVENT_NAME || !exact(params.arguments, []) || params.cursor != null) throw error("Unsupported event or arguments.");
+  // MCP request metadata is transport context, never event arguments or identity.
+  // Keep extension metadata compatible without persisting or forwarding it.
+  if (Object.hasOwn(params, "_meta") && !object(params._meta)) throw error("Invalid request metadata.");
   const fields = subscribe ? ["mode", "url", "secret"] : ["mode", "url"];
   if (!exact(params.delivery, fields) || params.delivery.mode !== "webhook") throw error("Webhook delivery is required.");
   const url = callbackUrl(params.delivery.url);

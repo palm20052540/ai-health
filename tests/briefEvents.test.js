@@ -18,6 +18,12 @@ function env() {
 after(() => { for (const db of subscriptions) db.close(); });
 const params = (secret = SECRET) => ({ name: TRAINING_EVENT_NAME, arguments: {}, delivery: { mode: "webhook", url: URL, secret }, cursor: null });
 const verify = async (payload) => ({ accepted: true, status: 200, challenge: payload.event.challenge });
+const modernMeta = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+  "io.modelcontextprotocol/clientInfo": { name: "synthetic-client", version: "1" },
+  "synthetic.example/context": { ignored: true },
+};
 function fixture() { return { generated_at: ISO, recap: { freshness: { hevy: { synced_at: ISO, start_time: ISO } } }, recent_workouts: [{ id: "workout-1", start_time: ISO }], exercise_progress: [{ exercise_template_id: "press-1", query: "Synthetic press", sessions: [{ exercise_template_id: "press-1", workout_id: "workout-1", start_time: ISO, working_sets: 2, best_set: { weight_kg: 50, reps: 8 }, average_rpe: 7, rpe_count: 2, rpe_coverage_percent: 100 }] }] }; }
 
 test("subscription verifies once, persists across requests, renews idempotently and reveals no secret", async () => {
@@ -29,6 +35,55 @@ test("subscription verifies once, persists across requests, renews idempotently 
   assert.equal(config.raw.prepare("SELECT COUNT(*) AS n FROM brief_subscriptions").get().n, 1);
   assert.ok(!JSON.stringify(first).includes(SECRET));
   assert.ok(Date.parse(repeated.refreshBefore) > NOW);
+});
+
+test("protocol metadata supports subscription renewal and unsubscribe without changing identity or delivery", async () => {
+  const config = env(); const sent = [];
+  const sender = async (payload) => { sent.push(payload); return verify(payload); };
+  const original = await subscribeTraining(config, "owner", params(), sender, NOW);
+  const request = { ...params(), _meta: modernMeta };
+  const repeated = await subscribeTraining(config, "owner", request, sender, NOW + 1000);
+  assert.equal(original.id, repeated.id); assert.equal(sent.length, 1);
+  assert.ok(!JSON.stringify(sent).includes("synthetic.example/context"));
+  assert.ok(!JSON.stringify(config.raw.prepare("SELECT * FROM brief_subscriptions").get()).includes("synthetic.example/context"));
+  const stop = { name: TRAINING_EVENT_NAME, arguments: {}, delivery: { mode: "webhook", url: URL }, _meta: modernMeta };
+  await unsubscribeTraining(config, "other-owner", stop);
+  assert.equal(config.raw.prepare("SELECT COUNT(*) AS n FROM brief_subscriptions").get().n, 1);
+  await unsubscribeTraining(config, "owner", stop);
+  assert.equal(config.raw.prepare("SELECT COUNT(*) AS n FROM brief_subscriptions").get().n, 0);
+});
+
+test("malformed metadata and unknown business fields fail before callback verification", async () => {
+  const config = env(); let calls = 0;
+  const sender = async (payload) => { calls++; return verify(payload); };
+  for (const _meta of [null, [], "owner", true, 1]) {
+    await assert.rejects(subscribeTraining(config, "owner", { ...params(), _meta }, sender, NOW), { rpcCode: -32602 });
+    await assert.rejects(unsubscribeTraining(config, "owner", { name: TRAINING_EVENT_NAME, arguments: {}, delivery: { mode: "webhook", url: URL }, _meta }), { rpcCode: -32602 });
+  }
+  await assert.rejects(subscribeTraining(config, "owner", { ...params(), _meta: modernMeta, ownerId: "spoofed" }, sender, NOW), { rpcCode: -32602 });
+  assert.equal(calls, 0);
+  assert.equal(config.raw.prepare("SELECT COUNT(*) AS n FROM brief_subscriptions").get().n, 0);
+});
+
+test("modern MCP responses declare completion and private cache hints while legacy shapes remain compatible", async () => {
+  const config = env(); let callbacks = 0;
+  const deps = { sendWebhook: async (payload) => { callbacks++; return verify(payload); } };
+  const call = async (method, params, identity = false) => handleBriefMcp(new Request("https://site.example/mcp", { method: "POST", headers: identity ? { "oai-authenticated-user-email": "owner@example.test", "oai-authenticated-user-id": "owner" } : {}, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), config, deps);
+  const legacy = await (await call("initialize", {})).json();
+  assert.equal(legacy.result.protocolVersion, "2025-03-26"); assert.equal(legacy.result.resultType, undefined);
+  const legacyTools = await (await call("tools/list", {})).json();
+  assert.equal(legacyTools.result.ttlMs, undefined);
+  for (const method of ["server/discover", "tools/list"]) {
+    const reply = await (await call(method, { _meta: modernMeta })).json();
+    assert.equal(reply.result.resultType, "complete"); assert.equal(reply.result.ttlMs, 0); assert.equal(reply.result.cacheScope, "private");
+  }
+  assert.equal((await (await call("events/list", { _meta: modernMeta })).json()).result.resultType, "complete");
+  assert.equal((await call("events/subscribe", { ...params(), _meta: { ...modernMeta, ownerId: "owner", email: "owner@example.test" } })).status, 401);
+  assert.equal(callbacks, 0);
+  const accepted = await (await call("events/subscribe", { ...params(), _meta: modernMeta }, true)).json();
+  assert.equal(accepted.result.resultType, "complete"); assert.equal(callbacks, 1);
+  const stop = { name: TRAINING_EVENT_NAME, arguments: {}, delivery: { mode: "webhook", url: URL }, _meta: modernMeta };
+  assert.equal((await (await call("events/unsubscribe", stop, true)).json()).result.resultType, "complete");
 });
 
 test("callback failures, invalid destinations, schemas and unsigned secrets never activate a subscription", async () => {

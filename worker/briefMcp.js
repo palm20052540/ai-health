@@ -54,12 +54,14 @@ export async function handleBriefMcp(request, env, dependencies) {
   catch { return rpcError(null, -32700, "Invalid JSON request.", 400); }
   if (body.jsonrpc !== "2.0" || typeof body.method !== "string") return rpcError(body.id, -32600, "Invalid MCP request.", 400);
   if (body.method === "notifications/initialized") return new Response(null, { status: 202, headers });
-  const ok = (result) => response({ jsonrpc: "2.0", id: body.id ?? null, result });
+  const modern = body.method === "server/discover" || body.params?._meta?.["io.modelcontextprotocol/protocolVersion"] === "2026-07-28";
+  const ok = (result) => response({ jsonrpc: "2.0", id: body.id ?? null, result: { ...(modern ? { resultType: "complete" } : {}), ...result } });
+  const cacheHints = modern ? { ttlMs: 0, cacheScope: "private" } : {};
   // Discovery contains no private source data; Sites still enforces its private boundary.
-  if (body.method === "server/discover") return ok({ resultType: "complete", supportedVersions: ["2026-07-28"], capabilities: { tools: {}, events: {} } });
+  if (body.method === "server/discover") return ok({ ...cacheHints, supportedVersions: ["2026-07-28"], capabilities: { tools: {}, events: {} } });
   if (body.method === "initialize") return ok({ protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "tong-fit-private-briefs", version: "1.0.0" } });
   if (body.method === "ping") return ok({});
-  if (body.method === "tools/list") return ok({ tools: BRIEF_TOOLS });
+  if (body.method === "tools/list") return ok({ ...cacheHints, tools: BRIEF_TOOLS });
   if (body.method === "events/list") return ok({ events: [TRAINING_EVENT] });
   if (!["tools/call", "events/subscribe", "events/unsubscribe"].includes(body.method)) return rpcError(body.id, -32601, "Method not available.");
   let ownerId;
