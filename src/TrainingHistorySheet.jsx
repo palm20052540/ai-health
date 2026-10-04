@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BottomSheet, RangeControl } from "./components";
+import { BottomSheet, ContextDetails, RangeControl } from "./components";
 import { historyDate } from "./metricHistory.js";
 import { validRpe } from "./recoveryModel.js";
 import { finiteNumber, rpeCoverage } from "./trainingModel.js";
@@ -19,7 +19,7 @@ export function TrainingHistorySheet({ payload, range, dataState, returnTab = "T
     <div className="metric-history">
       <p className="sheet-lead">Hevy · recorded working sets · Bangkok time</p>
       <RangeControl value={range} onChange={(value) => { setSelected(null); onRangeChange(value); }} />
-      <p className="history-coverage">Only workouts represented in this snapshot are listed. Recent workout summaries are limited to five; older sessions can have exercise records without full workout totals.</p>
+      <ContextDetails title="History coverage"><p className="history-coverage">Only workouts represented in this snapshot are listed. Recent workout summaries are limited to five; older sessions can have exercise records without full workout totals.</p></ContextDetails>
       {dataState === "stale" ? <p className="data-note">Cached history · refresh before using it for training decisions.</p> : null}
       {!available ? <p role="status" className="empty-state compact">{dataState === "loading" ? "Loading training records…" : "Training history is unavailable. No sample sessions are shown."}</p> : workout ? <>
         <button type="button" className="text-button" onClick={() => setSelected(null)}>Back to session list</button>

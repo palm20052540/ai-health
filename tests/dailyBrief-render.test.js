@@ -20,13 +20,13 @@ const render = (props = {}) => renderToStaticMarkup(React.createElement(DailyBri
 
 test("DailyBrief actual JSX leads with a narrative then six accessible evidence-backed themes", () => {
   const html = render();
-  assert.ok(html.indexOf("How is your health looking today?") < html.indexOf("daily-brief-themes"));
+  assert.ok(html.indexOf("Today’s picture") < html.indexOf("daily-brief-themes"));
   assert.equal((html.match(/class="daily-brief-card"/g) || []).length, 6);
   assert.equal((html.match(/class="brief-uncertainty"/g) || []).length, 6);
   assert.equal((html.match(/brief-rating-insufficient/g) || []).length, 6);
   for (const label of ["Sleep", "Recovery", "Training readiness", "Training trend", "Activity", "Attention"]) assert.ok(html.includes(label));
   assert.ok(html.includes("Brief unavailable"));
-  assert.ok(html.includes("The saved assistant summary is unavailable"));
+  assert.ok(html.includes("Coach summary unavailable"));
   assert.ok(!html.includes("AI generated"));
 });
 

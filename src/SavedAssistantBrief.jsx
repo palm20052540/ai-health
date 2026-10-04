@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { ContextDetails } from "./components";
 import { cachedBrief, briefCacheExpired } from "./briefCache.js";
 import { BRIEF_THEMES, RATING_LABELS } from "./dailyBrief";
 
 const STATES = ["ready", "missing", "stale", "unavailable"];
 const EMPTY_BRIEF = { status: "loading", report: null, generatedAt: null, sourceAt: null, reason: "" };
 const STATUS_COPY = {
-  loading: "Checking for a saved assistant summary…",
-  ready: "Assistant-written summary saved to this site. This page does not generate it.",
-  missing: "No assistant summary has been saved yet.",
-  stale: "The saved assistant summary is out of date and is not shown. A new summary needs to be saved before it can be used.",
-  unavailable: "The saved assistant summary is unavailable right now.",
-  sample: "Sample preview. Personal assistant summaries are not shown.",
+  loading: "Checking current evidence…",
+  ready: "",
+  missing: "Coach summary not saved yet.",
+  stale: "Coach summary needs updating.",
+  unavailable: "Coach summary unavailable right now.",
+  sample: "Sample only · no personal assessment.",
 };
 const timestamp = (value) => typeof value === "string" && Number.isFinite(Date.parse(value));
 const text = (value) => typeof value === "string" && value.trim().length > 0;
@@ -80,7 +81,8 @@ export function useSavedAssistantBrief(kind, refreshKey = 0, enabled = true, dis
 }
 
 export function SavedBriefStatus({ brief, fallback = false }) {
-  return <p className="brief-status" role="status">{STATUS_COPY[brief?.status] || STATUS_COPY.unavailable}{brief?.cacheHit ? " Reused from this page’s private cache (checked less than half a minute ago)." : ""}{fallback ? " The six themes below use the current rules-based evidence." : ""}</p>;
+  if (brief?.status === "ready") return null;
+  return <p className="brief-status" role="status">{STATUS_COPY[brief?.status] || STATUS_COPY.unavailable}{fallback ? " Using current rules-based evidence below." : ""}</p>;
 }
 
 function formatSavedAt(value) {
@@ -98,8 +100,8 @@ export function BriefThemeCards({ themes }) {
     return <article className="daily-brief-card" key={theme.id}>
       <div className="section-title-row"><h3>{label}</h3><span className={`brief-rating brief-rating-${theme.rating}`}>{RATING_LABELS[theme.rating]}</span></div>
       <p>{theme.summary}</p>
-      <ul className="brief-evidence" aria-label={`${label} evidence`}>{theme.evidence.map((item, index) => <li key={index}>{item}</li>)}</ul>
-      <p className="brief-uncertainty"><strong>Limit:</strong> {theme.uncertainty}</p>
+      <ContextDetails title="Why this rating"><ul className="brief-evidence" aria-label={`${label} evidence`}>{theme.evidence.map((item, index) => <li key={index}>{item}</li>)}</ul>
+      <p className="brief-uncertainty"><strong>Limit:</strong> {theme.uncertainty}</p></ContextDetails>
     </article>;
   })}</div>;
 }
@@ -109,11 +111,10 @@ const BADGE_COPY = { loading: "Checking", ready: "Assistant summary", missing: "
 export function RecoveryMorningBriefContent({ brief = EMPTY_BRIEF }) {
   const themes = brief.status === "ready" ? brief.report?.themes?.filter(({ id }) => ["recovery", "training_readiness"].includes(id)) : null;
   return <section className="saved-assistant-brief recovery-morning-brief" aria-labelledby="morning-brief-title" aria-busy={brief.status === "loading"}>
-    <div className="section-title-row"><div><span className="section-kicker">Saved daily brief</span><h2 id="morning-brief-title">Morning recovery evidence</h2></div><span className="brief-source">{BADGE_COPY[brief.status] || "Unavailable"}</span></div>
-    <p className="brief-boundary">This summary does not include your local pain or fatigue inputs and does not replace the immediate Recovery check-in above.</p>
+    <div className="section-title-row"><div><span className="section-kicker">Saved daily brief</span><h2 id="morning-brief-title">Recovery outlook</h2></div><span className="brief-source">{BADGE_COPY[brief.status] || "Unavailable"}</span></div>
     <SavedBriefStatus brief={brief} />
-    <BriefTimestamps brief={brief} />
     {themes ? <BriefThemeCards themes={themes} /> : null}
+    <ContextDetails title="Sources and scope"><BriefTimestamps brief={brief} /><p className="brief-boundary">This summary does not include your local pain or fatigue inputs and does not replace the immediate Recovery check-in above.</p></ContextDetails>
   </section>;
 }
 
@@ -125,12 +126,12 @@ export function RecoveryMorningBrief({ refreshKey, enabled = true, disabledStatu
 export function SavedTrainingBriefContent({ brief = EMPTY_BRIEF }) {
   const report = brief.status === "ready" ? brief.report : null;
   return <section className="saved-assistant-brief saved-training-brief" aria-labelledby="training-brief-title" aria-busy={brief.status === "loading"}>
-    <div className="section-title-row"><div><span className="section-kicker">Assistant evidence review</span><h2 id="training-brief-title">Saved training review</h2></div><span className="brief-source">{BADGE_COPY[brief.status] || "Unavailable"}</span></div>
+    <div className="section-title-row"><div><span className="section-kicker">Session review</span><h2 id="training-brief-title">Coach’s take</h2></div><span className="brief-source">{BADGE_COPY[brief.status] || "Unavailable"}</span></div>
     <SavedBriefStatus brief={brief} />
-    {report ? <><p className="saved-brief-narrative">{report.narrative}</p><BriefTimestamps brief={brief} />
+    {report ? <><p className="saved-brief-narrative">{report.narrative}</p>
       {report.exercises.length ? <details className="saved-exercise-reviews"><summary>Exercise evidence · {report.exercises.length} {report.exercises.length === 1 ? "exercise" : "exercises"}</summary><div>{report.exercises.map((exercise) => <article className="daily-brief-card" key={exercise.exerciseId}><h3>{exercise.title}</h3><p>{exercise.summary}</p><ul className="brief-evidence" aria-label={`${exercise.title} evidence`}>{exercise.evidence.map((item, index) => <li key={index}>{item}</li>)}</ul><p className="brief-uncertainty"><strong>Limit:</strong> {exercise.uncertainty}</p></article>)}</div></details> : <p className="coverage">No exercise-specific evidence was included in this saved review.</p>}
     </> : null}
-    <p className="brief-boundary">Use this review as context alongside your current Recovery check-in. The conservative training guidance below remains separate.</p>
+    <ContextDetails title="Sources and scope"><BriefTimestamps brief={brief} /><p className="brief-boundary">Use this review as context alongside your current Recovery check-in. The conservative training guidance below remains separate.</p><p className="coverage">Assistant-written summary saved to this site. This page does not generate it.{brief?.cacheHit ? " Reused from this page’s private cache (checked less than half a minute ago)." : ""}</p></ContextDetails>
   </section>;
 }
 

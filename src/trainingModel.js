@@ -95,7 +95,7 @@ export function buildLatestSessionReview(payload) {
     const current = ordered(rows).at(-1);
     const history = safeHistory(id, progress);
     const previous = history.filter((session) => session.workout_id !== workoutId && timestamp(sessionDate(session)) != null && timestamp(sessionDate(session)) < timestamp(sessionDate(current))).at(-1) || null;
-    const ambiguous = rows.length !== 1 || timestamp(sessionDate(current)) == null || !id || templateId(current) !== id || history.filter((session) => session.workout_id === workoutId).length !== 1;
+    const ambiguous = rows.length !== 1 || timestamp(sessionDate(current)) == null || !id || templateId(current) !== id || history.filter((session) => session.workout_id === workoutId).length !== 1 || (previous && history.filter((session) => session.workout_id === previous.workout_id).length !== 1);
     return [{
       key: id || `unidentified-${index}`, exercise_template_id: id,
       name: exercise.query || exercise.name || current.title || "Exercise", current,

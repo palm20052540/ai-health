@@ -69,7 +69,7 @@ test("live Health fallback is based on the active payload rather than a stale sa
 
 test("sample preview cannot show a personal saved summary even when the response is ready", () => {
   const html = render(DailyBriefContent, { payload: { sample: true, generated_at: new Date().toISOString() }, dataState: "live", assistantBrief: saved() });
-  assert.ok(html.includes("Sample preview"));
+  assert.ok(html.includes("Sample only"));
   assert.ok(!html.includes(dailyReport.narrative));
   assert.equal((html.match(/brief-rating-insufficient/g) || []).length, 6);
 });
@@ -154,7 +154,7 @@ test("integration keeps saved reviews refreshable after Sync and leaves existing
   assert.ok(app.includes("setBriefRefreshKey((value) => value + 1)"));
   assert.ok(app.includes("result?.assistant_analysis"));
   assert.ok(app.indexOf("<RecoveryCheckIn") < app.indexOf("<RecoveryMorningBrief"));
-  assert.ok(app.indexOf("<SavedTrainingBrief") < app.indexOf("<TrainingView"));
+  assert.ok(app.includes("assistantReview={<SavedTrainingBrief"));
   assert.ok(!daily.includes("fetchDailyBrief"));
   assert.ok(!daily.includes("/api/health-brief"));
   assert.ok(!savedSource.includes("/api/health-brief"));
@@ -166,12 +166,12 @@ test("integration keeps saved reviews refreshable after Sync and leaves existing
 test("cache revalidation withholds prose without falsely requesting new assistant generation", async () => {
   const html = render(DailyBriefContent, { dataState: "stale", assistantBrief: saved() });
   assert.ok(!html.includes(dailyReport.narrative));
-  assert.ok(html.includes("Checking for a saved assistant summary"));
+  assert.ok(html.includes("Checking current evidence"));
   assert.ok(!html.includes("out of date"));
   assert.ok(!html.includes("new summary needs to be saved"));
   const source = await readFile(new URL("../src/SavedAssistantBrief.jsx", import.meta.url), "utf8");
   assert.ok(source.includes('briefCacheExpired(result.brief) ? { ...EMPTY_BRIEF, status: "loading" }'));
   const stale = render(SavedTrainingBriefContent, { brief: saved("training", { status: "stale", report: null }) });
   assert.ok(stale.includes("New summary needed"));
-  assert.ok(stale.includes("out of date"));
+  assert.ok(stale.includes("Coach summary needs updating"));
 });

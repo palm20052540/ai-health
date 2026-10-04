@@ -1,7 +1,7 @@
 import { WorkingSetRecords } from "./TrainingHistorySheet";
 import { sourceInstant } from "./dates.js";
 import React from "react";
-import { BottomSheet, Sparkline } from "./components";
+import { BottomSheet, ContextDetails, Sparkline } from "./components";
 import { Icon } from "./icons";
 import { finiteNumber, rpeCoverage, sessionDate } from "./trainingModel";
 
@@ -28,7 +28,7 @@ export function ExerciseDetailSheet({ exercise, onClose }) {
   const lastThree = values.slice(-3);
   const flat = lastThree.length === 3 && Math.max(...lastThree) - Math.min(...lastThree) < 1;
   return <BottomSheet title={exercise?.name || "Exercise progress"} onClose={onClose}>
-    <p className="sheet-lead">Logged working sets only. Estimated 1RM is useful for describing a trend, not a max-test prescription.</p>
+    <ContextDetails title="How to read this history"><p className="sheet-lead">Logged working sets only. Estimated 1RM is useful for describing a trend, not a max-test prescription.</p></ContextDetails>
     <div className="detail-stats">
       <div><small>Estimated 1RM</small><strong>{values.length ? `${values.at(-1).toFixed(1)} kg` : "—"}</strong></div>
       <div><small>Range change</small><strong className={change != null && change < 0 ? "negative" : ""}>{change == null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`}</strong></div>
@@ -79,7 +79,7 @@ export function PostWorkoutSheet({ workout, settings, onClose }) {
       : "Logged effort is available, but one workout alone does not establish readiness to progress. Compare exercise history and current recovery in Next session plan.";
   const volume = finiteNumber(workout?.volume_kg);
   return <BottomSheet title={workout?.title || "Post-workout review"} onClose={onClose}>
-    <p className="sheet-lead">A debrief from the completed log. Working volume alone is not evidence of better performance.</p>
+    <ContextDetails title="Reading this session"><p className="sheet-lead">A debrief from the completed log. Working volume alone is not evidence of better performance.</p></ContextDetails>
     <div className="detail-stats workout-scorecard">
       <div><small>Working sets</small><strong>{value(workout?.working_sets ?? workout?.completed_sets)}</strong></div>
       <div><small>Working volume</small><strong>{volume == null ? "—" : `${volume.toLocaleString()} kg`}</strong></div>

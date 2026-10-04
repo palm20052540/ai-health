@@ -1,7 +1,8 @@
+import { exerciseCoach, sessionFocus } from "./coaching.js";
 import { exerciseHistory } from "./trainingHistory.js";
 import { sourceInstant } from "./dates.js";
 import React, { useEffect, useMemo, useState } from "react";
-import { BottomSheet, Insight, Sparkline } from "./components";
+import { BottomSheet, ContextDetails, Insight, Sparkline } from "./components";
 import { Icon } from "./icons";
 import { fetchRoutine, fetchRoutines } from "./portalData";
 import { buildLatestSessionReview, buildNextSessionPlan, buildProgressCoverage, finiteNumber, PROGRESS_RANGES, routineDetail, routineList, rpeCoverage, sessionDate, trainingDraftContext } from "./trainingModel";
@@ -37,30 +38,34 @@ function EmptyState({ title, children }) {
   return <div className="empty-state compact training-state"><strong>{title}</strong><span>{children}</span></div>;
 }
 
-function LatestSession({ payload, onWorkout, onExercise }) {
+function LatestSession({ payload, onWorkout, onExercise, onPlan, assistantReview }) {
   const review = useMemo(() => buildLatestSessionReview(payload), [payload]);
   if (!review.latest) return <EmptyState title="No completed session yet">A real Hevy workout is needed before a session review can be shown.</EmptyState>;
   const { latest, previous, exercises } = review;
+  const coach = sessionFocus(exercises);
   const effort = rpeCoverage(latest);
   const volume = finiteNumber(latest.volume_kg), priorVolume = finiteNumber(previous?.volume_kg);
   const delta = volume != null && priorVolume != null ? volume - priorVolume : null;
   return <>
-    <Insight tone="orange" icon="dumbbell" title={latest.title || "Latest completed session"} copy={`${dateText(sessionDate(latest))} · Review the logged work before choosing the next target.`} />
+    <Insight tone="orange" icon="dumbbell" title={latest.title || "Latest completed session"} copy={dateText(sessionDate(latest))} />
+    {assistantReview}
     <section className="training-review-card">
-      <div className="section-title-row"><h2>Session overview</h2><button type="button" className="text-button" onClick={() => onWorkout?.(latest)}>Details <Icon name="chevron" size={16} /></button></div>
+      <div className="section-title-row"><h2>{coach.title}</h2><button type="button" className="text-button" onClick={() => onWorkout?.(latest)}>Details <Icon name="chevron" size={16} /></button></div>
+      <p className="coach-progress-count">{coach.detail}</p>
       <dl className="muscle-summary-grid" aria-label="Latest session summary">
         <SummaryStat label="Working volume" value={amount(volume, " kg")} detail="warm-up sets excluded" />
         <SummaryStat label="Working sets" value={amount(latest.working_sets ?? latest.completed_sets)} detail={`${amount(latest.exercise_count)} exercises`} />
         <SummaryStat label="Average RPE" value={amount(effort.average)} detail={effort.percent == null ? "coverage unknown" : `${Math.round(effort.percent)}% working-set coverage`} />
       </dl>
-      <p className="training-coverage">{delta == null ? "No prior session-volume comparison is available." : `${delta >= 0 ? "+" : ""}${amount(delta)} kg versus the previous logged workout (${previous.title || "Workout"}, ${dateText(sessionDate(previous), true)}). The exercise mix may differ.`}</p>
-      <p className="coverage">{review.narrative}</p>
+      <div className="coach-next"><strong>Next step</strong><p>{coach.action}</p><button type="button" className="text-button" onClick={onPlan}>Open next session plan</button></div>
+      <ContextDetails title="Session comparison and method"><p className="training-coverage">{delta == null ? "No prior session-volume comparison is available." : `${delta >= 0 ? "+" : ""}${amount(delta)} kg versus the previous logged workout (${previous.title || "Workout"}, ${dateText(sessionDate(previous), true)}). The exercise mix may differ.`}</p>
+      <p className="coverage">{review.narrative}</p></ContextDetails>
     </section>
     <section><div className="section-title-row"><h2>Exercise comparisons</h2></div>
       <div className="training-comparison-list">{exercises.length ? exercises.map((exercise) => <article className="training-comparison-row" key={exercise.key}>
-        <div><strong>{exercise.name}</strong><span className="training-status-pill">{exercise.previous ? "Same exercise ID" : "Limited comparison"}</span></div>
+        <div><strong>{exercise.name}</strong><span className={`training-status-pill ${exerciseCoach(exercise).tone}`}>{exerciseCoach(exercise).label}</span></div>
         <p>{topSet(exercise.current)}</p><small>{exercise.previous ? `Previous: ${topSet(exercise.previous)} · ${dateText(sessionDate(exercise.previous), true)}` : "No verified prior comparison"}</small>
-        <p className="training-coverage">{exercise.narrative}</p><button type="button" className="text-button" disabled={!exercise.exercise_template_id} onClick={() => onExercise?.(exerciseHistory(payload, exercise.exercise_template_id))}>Exercise history</button>
+        <p className="coach-comparison">{exerciseCoach(exercise).progress}</p><ContextDetails title="Comparison details"><p className="training-coverage">{exercise.narrative}</p><p>{exerciseCoach(exercise).focus}</p></ContextDetails><button type="button" className="text-button" disabled={!exercise.exercise_template_id} onClick={() => onExercise?.(exerciseHistory(payload, exercise.exercise_template_id))}>Exercise history</button>
       </article>) : <EmptyState title="Exercise detail is incomplete">The session total is real. Exercise-level history for this workout is not available in the selected dataset.</EmptyState>}</div>
     </section>
   </>;
@@ -80,20 +85,21 @@ function PlanRows({ plan, context }) {
     const fields = { ...row.prescription, ...adjusted };
     return <article className="training-plan-card" key={row.key}>
       <div className="section-title-row"><h3>{row.name}</h3><span className={`training-status-pill ${row.status}`}>{adjusted ? "Your adjusted draft" : row.label}</span></div>
-      <p className="training-coverage">Routine reference · {setReference(row.baseline)}</p>
-      {row.status === "abstain" && row.editable ? <p className="coverage">These are unchanged routine reference values. Evidence is insufficient for an automatic target.</p> : null}
+      <ContextDetails title="Routine reference"><p className="training-coverage">{setReference(row.baseline)}</p></ContextDetails>
+      {row.status === "abstain" && row.editable ? <p className="coverage">Reference only · not a recommended target.</p> : null}
       <div className="training-plan-fields">
         <label><span>Load (kg)</span><input aria-label={`${row.name} load in kg`} type="number" min="0" max="1000" step="0.5" placeholder="Per-set / unknown" disabled={!row.editable} value={fields.loadKg ?? ""} onChange={(event) => update(row.key, "loadKg", event.target.value)} /></label>
         <label><span>Working sets</span><input aria-label={`${row.name} working sets`} type="number" min="0" max="30" step="1" placeholder="—" disabled={!row.editable} value={fields.sets ?? ""} onChange={(event) => update(row.key, "sets", event.target.value)} /></label>
         <label><span>Reps / set</span><input aria-label={`${row.name} reps per set`} type="number" min="1" max="100" step="1" placeholder="Per-set / unknown" disabled={!row.editable} value={fields.reps ?? ""} onChange={(event) => update(row.key, "reps", event.target.value)} /></label>
       </div>
-      <ul className="training-plan-reasons">{row.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+      {row.status === "abstain" || row.status === "rest" ? <p className="plan-blocker">{row.reasons.at(-1)}</p> : <p className="coach-comparison">{row.status === "reduce" ? "Use the easier target above. Stop if pain or unusual symptoms appear." : row.status === "optional-progression" ? "An extra rep is optional. Keep technique controlled and stay within your effort cap." : "Repeat with controlled technique. A load increase is not required."}</p>}
+      <ContextDetails title="Why this target"><ul className="training-plan-reasons">{row.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></ContextDetails>
       {adjusted ? <><p className="coverage">Your edits are local choices, not validated recommendations. They do not override pain or recovery limits.</p><button type="button" className="text-button" onClick={() => setOverrides((current) => { const next = { ...current.values }; delete next[row.key]; return { context, values: next }; })}>Reset this exercise</button></> : null}
     </article>;
   })}</div>;
 }
 
-function NextSessionPlan({ payload, settings, recovery, dataState }) {
+function NextSessionPlan({ payload, settings, recovery, dataState, onOpenRecovery }) {
   const [routines, setRoutines] = useState([]);
   const [selected, setSelected] = useState("");
   const [listState, setListState] = useState("loading");
@@ -126,7 +132,8 @@ function NextSessionPlan({ payload, settings, recovery, dataState }) {
   const plan = useMemo(() => buildNextSessionPlan({ routine, payload, settings, recovery, dataState }), [routine, payload, settings, recovery, dataState]);
   const context = trainingDraftContext({ selected, routine, payload, settings, recovery });
   return <>
-    <Insight tone="orange" icon="dumbbell" title="Choose the routine you’ll actually train" copy="Targets use this routine’s stable exercise IDs, logged effort, your goal, and the recovery check-in you applied." />
+    <Insight tone="orange" icon="dumbbell" title="Plan your next session" copy="Choose your routine. Set the effort from your current Recovery check-in." />
+    {(!recovery || recovery.stale) && onOpenRecovery ? <button type="button" className="primary-button full" onClick={onOpenRecovery}>Complete Recovery check-in</button> : null}
     <section className="training-plan-header">
       {listState === "loading" ? <p role="status">Loading Hevy routines…</p> : null}
       {listState === "error" ? <><EmptyState title="Hevy routines unavailable">{listError}</EmptyState><button type="button" className="text-button" onClick={() => setRetry((value) => value + 1)}>Retry routines</button></> : null}
@@ -134,7 +141,7 @@ function NextSessionPlan({ payload, settings, recovery, dataState }) {
       {routines.length ? <div className="routine-selector"><label><span>Hevy routine</span><select aria-label="Hevy routine" value={selected} onChange={(event) => setSelected(event.target.value)}>{routines.map((item) => <option value={item.id} key={item.id}>{item.title || "Untitled routine"}</option>)}</select></label></div> : null}
       {selected && (detailState.id !== selected || detailState.status === "loading") ? <p role="status">Loading selected routine…</p> : null}
       {detailState.id === selected && detailState.status === "error" ? <><p className="form-error" role="alert">{detailState.error}</p><button type="button" className="text-button" onClick={() => setRetry((value) => value + 1)}>Retry selected routine</button></> : null}
-      {routine ? <><div className="section-title-row"><h2>{plan.title}</h2><span className="training-status-pill">Recovery: {plan.recoveryLabel}</span></div><p className="coverage">{plan.summary}</p></> : null}
+      {routine ? <><div className="section-title-row"><h2>{plan.title}</h2><span className="training-status-pill">Recovery: {plan.recoveryLabel}</span></div><p className="coverage">Goal: {plan.goal} · editable local draft</p><ContextDetails title="How this plan works"><p>{plan.summary}</p></ContextDetails></> : null}
     </section>
     {routine && !plan.rows.length ? <EmptyState title="This routine has no exercises">Choose a routine with working-set targets.</EmptyState> : null}
     {routine ? <PlanRows plan={plan} context={context} /> : null}
@@ -208,10 +215,10 @@ function LongTermProgress({ payload, view, range, setRange, openExercise, openWo
   const workouts = view?.training?.recentWorkouts || [];
   const selectMuscle = (muscle) => setSelected((current) => current.includes(muscle) ? current.length === 1 ? current : current.filter((item) => item !== muscle) : MUSCLES.filter((item) => current.includes(item) || item === muscle));
   return <>
-    <Insight tone="orange" icon="dumbbell" title="Progress follows the history you’ve recorded" copy={coverage.narrative} />
+    <Insight tone="orange" icon="dumbbell" title={summary.strength === "—" ? "Keep building your baseline" : `Estimated strength trend: ${summary.strength}`} copy={summary.strength === "—" ? "Log comparable sessions to see how performance changes." : "Check which exercises moved forward, then use the next-session plan to choose targets."} />
     <section className="muscle-progress-section">
       <div className="section-title-row progress-heading"><h2>Progress by muscle <Icon name="info" size={16} /></h2><div className="compact-range" role="group" aria-label="Progress range">{PROGRESS_RANGES.map((item) => <button type="button" aria-pressed={range === item.value} className={range === item.value ? "active" : ""} key={item.value} onClick={() => setRange?.(item.value)}>{item.label}</button>)}</div></div>
-      <p className="training-coverage">{coverage.first ? `${dateText(coverage.first)}–${dateText(coverage.last)} · ` : ""}{coverage.rpePercent == null ? "RPE coverage unknown" : `${Math.round(coverage.rpePercent)}% RPE coverage`}. Muscle totals use primary-muscle attribution; secondary overlap is not counted.</p>
+      <ContextDetails title="Coverage and method"><p className="training-coverage">{coverage.first ? `${dateText(coverage.first)}–${dateText(coverage.last)} · ` : ""}{coverage.rpePercent == null ? "RPE coverage unknown" : `${Math.round(coverage.rpePercent)}% RPE coverage`}. Muscle totals use primary-muscle attribution; secondary overlap is not counted.</p><p>{coverage.narrative}</p></ContextDetails>
       <div className="muscle-pills" role="group" aria-label="Muscle groups">{MUSCLES.filter((muscle) => muscle !== "Other" || exerciseGroups.Other.length).map((muscle) => <button type="button" aria-pressed={selected.includes(muscle)} className={selected.includes(muscle) ? "active" : ""} key={muscle} onClick={() => selectMuscle(muscle)}>{muscle}</button>)}</div>
       <div className="selected-muscle-title"><h2>{selectedLabel}</h2><span>{summary.strength} avg e1RM change</span></div>
       <dl className="muscle-summary-grid" aria-label={`${selectedLabel} training summary`}>
@@ -222,14 +229,14 @@ function LongTermProgress({ payload, view, range, setRange, openExercise, openWo
         <SummaryStat label="Last trained" value={summary.last} detail="latest observed" />
       </dl>
       <ProgressChart summary={summary} muscle={selectedLabel} />
-      <p className="coverage">Estimated 1RM is a descriptive estimate, not a max-test prescription. Muscle change is the mean of comparable exercise trends; neither it nor more volume proves improvement on its own.</p>
+      <ContextDetails title="Reading this trend"><p className="coverage">Estimated 1RM is a descriptive estimate, not a max-test prescription. Muscle change is the mean of comparable exercise trends; neither it nor more volume proves improvement on its own.</p></ContextDetails>
     </section>
     <section className="muscle-exercises-section"><div className="section-title-row"><h2>{selectedLabel} exercises</h2><button type="button" className="text-button" onClick={() => openExerciseList?.(exerciseGroups, selected)}>See all <Icon name="chevron" size={16} /></button></div><ExerciseRows exercises={exercises} onExercise={openExercise} /></section>
     <section className="workout-timeline-section"><div className="section-title-row"><h2>Recent workout timeline</h2><button type="button" className="text-button" onClick={() => openTimeline?.(workouts)}>See all <Icon name="chevron" size={16} /></button></div><TimelineRows workouts={workouts} onWorkout={openWorkout} limit={1} /></section>
   </>;
 }
 
-export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recovery, dataState = payload ? "live" : "unavailable", range = "30D", setRange, openHistory, openExercise, openWorkout, openExerciseList, openTimeline }) {
+export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recovery, dataState = payload ? "live" : "unavailable", range = "30D", setRange, assistantReview, onOpenRecovery, openHistory, openExercise, openWorkout, openExerciseList, openTimeline }) {
   const [tab, setTab] = useState("latest");
   const changeTab = (next) => { setTab(next); if (next === "progress" && !PROGRESS_RANGES.some((item) => item.value === range)) setRange?.("30D"); };
   const onTabKey = (event, index) => {
@@ -240,13 +247,13 @@ export function TrainingView({ payload, view, settings = EMPTY_SETTINGS, recover
   };
   return <>
     <div className="training-subtabs" role="tablist" aria-label="Training views">{TABS.map((item, index) => <button type="button" role="tab" id={`training-tab-${item.id}`} aria-controls={`training-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} className={tab === item.id ? "active" : ""} key={item.id} onKeyDown={(event) => onTabKey(event, index)} onClick={() => changeTab(item.id)}>{item.label}</button>)}</div>
-    <button type="button" className="secondary-button full history-entry" onClick={openHistory}>Browse session history</button>
+    <button type="button" className="text-button history-entry" onClick={openHistory}>Browse session history</button>
     {TABS.map((item) => <div key={item.id} role="tabpanel" id={`training-panel-${item.id}`} aria-labelledby={`training-tab-${item.id}`} hidden={tab !== item.id} tabIndex="0">
       {tab === item.id ? <>
         {dataState === "loading" ? <p className="training-coverage" role="status">Loading live training history…</p> : null}
         {dataState === "unavailable" ? <p className="training-coverage" role="status">Live training history is unavailable. Automatic prescriptions are paused.</p> : null}
-        {item.id === "latest" ? <LatestSession payload={payload} onWorkout={openWorkout} onExercise={openExercise} /> : null}
-        {item.id === "next" ? <NextSessionPlan payload={payload} settings={settings} recovery={recovery} dataState={dataState} /> : null}
+        {item.id === "latest" ? <LatestSession payload={payload} onWorkout={openWorkout} onExercise={openExercise} onPlan={() => changeTab("next")} assistantReview={assistantReview} /> : null}
+        {item.id === "next" ? <NextSessionPlan payload={payload} settings={settings} recovery={recovery} dataState={dataState} onOpenRecovery={onOpenRecovery} /> : null}
         {item.id === "progress" ? <LongTermProgress payload={payload} view={view} range={range} setRange={setRange} openExercise={openExercise} openWorkout={openWorkout} openExerciseList={openExerciseList} openTimeline={openTimeline} /> : null}
       </> : null}
     </div>)}

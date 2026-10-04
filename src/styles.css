@@ -504,3 +504,26 @@ button:disabled { cursor: wait; opacity: .6; }
 .working-records { padding: 0; list-style: none; }.working-records li { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0; font-size: .875rem; border-bottom: 1px solid var(--line); }.working-records strong { width: 100%; }
 .history-set-detail { grid-column: 1 / -1; text-align: left; }.history-set-detail summary { min-height: 44px; padding-top: 10px; font-size: .875rem; cursor: pointer; }
 .app-shell[hidden] { display: none !important; }
+
+/* Coaching first: compact context, full evidence available on demand. */
+.context-details { margin: 10px 0; font-size: .875rem; color: var(--muted); }
+.context-details > summary { min-height: 36px; padding: 8px 0; color: #405675; cursor: pointer; font-weight: 600; }
+.context-details > div { padding: 4px 0 8px; line-height: 1.5; }
+.context-details p { font-size: .875rem; line-height: 1.5; }
+.context-details .brief-timestamps, .context-details .brief-boundary, .context-details .coverage { margin: 8px 0; }
+.coach-next { padding: 14px 16px; margin: 14px 0; border-radius: 14px; background: #edf5ff; }
+.coach-next > strong { display: block; font-size: 1rem; margin: 4px 0; }
+.coach-next p, .coach-comparison, .plan-blocker { font-size: .9375rem; line-height: 1.5; }
+.coach-next p { margin: 6px 0; }.coach-next button { min-height: 40px; padding-left: 0; }
+.coach-progress-count { font-size: .875rem; color: var(--muted); line-height: 1.5; }
+.safety-note { font-size: .875rem; line-height: 1.5; color: #71430a; padding: 10px 0; }
+.plan-blocker { color: #774b12; padding: 10px 0; }
+.training-status-pill.positive { background: #eaf6ee; color: #235d3c; }
+.training-status-pill.caution { background: #fff2dc; color: #774b12; }
+.training-subtabs { margin-top: 10px; }.history-entry { min-height: 40px; margin: 0 0 8px; font-size: .875rem; }
+.daily-brief .daily-brief-card p { font-size: .9375rem; line-height: 1.5; }
+.daily-brief-card .context-details { margin-bottom: 0; }.brief-status { font-size: .875rem; }
+.saved-assistant-brief { padding: 16px; }.saved-assistant-brief .section-kicker { display: none; }
+.saved-assistant-brief .brief-source { max-width: 106px; }.saved-assistant-brief .context-details { margin-bottom: 0; }
+.source-status { margin-top: 20px; }.source-status summary { min-height: 44px; padding: 12px 0; }
+@media (max-width: 480px) { .daily-brief-themes { grid-template-columns: 1fr; }.daily-brief-card { padding: 14px; }.daily-brief-card .section-title-row { margin-bottom: 6px; } }

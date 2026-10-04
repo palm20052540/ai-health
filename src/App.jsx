@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BottomNav, BottomSheet, EvidenceRow, Header, MetricRow, RangeControl, Sparkline, TrendChart } from "./components";
+import { BottomNav, BottomSheet, ContextDetails, EvidenceRow, Header, MetricRow, RangeControl, Sparkline, TrendChart } from "./components";
 import { Icon } from "./icons";
 import { metricDetails } from "./data";
 import { DailyBrief } from "./DailyBrief";
@@ -21,10 +21,10 @@ import { createDashboardCache } from "./dashboardCache.js";
 import { ownerStorage } from "./ownerStorage.js";
 import { clearSavedBriefCache, setBriefCacheOwner } from "./briefCache.js";
 
-function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, payload, settings, dataState, briefRefreshKey }) {
+function Health({ range, setRange, openMetric, openPhotos, openPhysique, view, payload, settings, dataState, briefRefreshKey, onOpenRecovery }) {
   return <>
-    <DailyBrief payload={payload} settings={settings} dataState={dataState} refreshKey={briefRefreshKey} />
-    <section className="list-section"><h2>Health metrics</h2><p className="coverage">Detailed source measurements for the selected period.</p></section>
+    <DailyBrief payload={payload} settings={settings} dataState={dataState} refreshKey={briefRefreshKey} onOpenRecovery={onOpenRecovery} />
+    <section className="list-section"><h2>Health metrics</h2></section>
     <RangeControl value={range} onChange={setRange} />
     {view ? <><EvidenceRow items={view.health.evidence} onMetric={openMetric} /><TrendChart data={view.health.chart} />
       <section className="list-section">{view.health.metrics.map((metric) => <MetricRow key={metric.label} {...metric} onClick={() => openMetric(metric.label)} />)}</section></> : <p className="empty-state">{dataState === "loading" ? "Loading health measurements…" : "Health measurements are unavailable. No sample values are shown."}</p>}
@@ -45,9 +45,9 @@ function Recovery({ range, setRange, openMetric, view, recovery, onApply, applyi
   </>;
 }
 
-function SourceStatus({ payload }) {
+function SourceStatus({ payload, cacheInfo }) {
   const rows = sourceFreshness(payload);
-  return <details className="source-status"><summary>Source freshness · measurements and sync</summary><ul>{rows.map((row) => <li key={row.id}><strong>{row.label} · {row.status}</strong><span>Measured {formatGeneratedAt(row.measuredAt)} · synced {formatGeneratedAt(row.synced_at)}</span></li>)}</ul><p>Older measurements stay marked stale even when another source syncs. History windows only include records already stored.</p></details>;
+  return <details className="source-status"><summary>Sources, cache and method</summary>{cacheInfo}<ul>{rows.map((row) => <li key={row.id}><strong>{row.label} · {row.status}</strong><span>Measured {formatGeneratedAt(row.measuredAt)} · synced {formatGeneratedAt(row.synced_at)}</span></li>)}</ul><p>Older measurements stay marked stale even when another source syncs. History windows only include records already stored.</p></details>;
 }
 
 function App() {
@@ -219,19 +219,19 @@ function App() {
     <a className="skip-link" href="#main-content">Skip to main content</a>
     <main id="main-content" tabIndex="-1" className={tab === "Training" ? "training-mode" : ""}>
       <Header syncing={syncing} onSync={sync} onSettings={() => setSheet({ type: "settings" })} status={status} lastSynced={view ? formatGeneratedAt(view.lastSynced) : null} />
-      {loadState.storedAt ? <p className="cache-status" role="status">{loadState.status === "live" ? "Source checked" : "Private cached snapshot"} {Math.max(0, Math.floor((now - loadState.storedAt) / 1000))}s ago{loadState.refreshing ? " · refreshing…" : ""}. Measurements keep their own source dates.{loadState.status === "stale" ? " Read-only until refreshed." : ""}<button type="button" className="text-button" disabled={loadState.refreshing || syncing} onClick={() => load(activeDays, { force: true }).catch(() => {})}>Refresh view</button></p> : null}
+      {loadState.status === "stale" && !loadState.error ? <p className="data-note" role="status">Refreshing cached data · training guidance is on hold.</p> : null}
       {loadState.error ? <div className="data-note" role="status"><strong>{payload ? "Showing older cached measurements." : "Source data unavailable."}</strong> {loadState.error}{!payload ? <button type="button" className="text-button" onClick={() => load(activeDays, { force: true }).catch(() => {})}>Refresh view</button> : null}</div> : null}
       {dataState === "sample" ? <div className="data-note" role="status">Sample snapshot received. Personal assessments and recommendations are withheld.</div> : null}
       <h1>{tab}</h1>
-      {tab === "Health" ? <Health range={ranges.Health} setRange={setRange} openMetric={openHealthMetric} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} payload={payload} settings={settings} dataState={dataState} briefRefreshKey={briefRefreshKey} /> : null}
+      {tab === "Health" ? <Health onOpenRecovery={() => selectTab("Recovery")} range={ranges.Health} setRange={setRange} openMetric={openHealthMetric} openPhotos={() => setSheet({ type: "photos" })} openPhysique={() => setSheet({ type: "setting", section: "physique" })} view={view} payload={payload} settings={settings} dataState={dataState} briefRefreshKey={briefRefreshKey} /> : null}
       {tab === "Recovery" ? <Recovery storage={preferencesRef.current} range={ranges.Recovery} setRange={setRange} openMetric={openHealthMetric} view={view} recovery={recovery} onApply={applyRecovery} applying={applyingRecovery} error={recoveryError} settings={settings} openGoals={() => setSheet({ type: "setting", section: "goals" })} briefRefreshKey={briefRefreshKey} dataState={dataState} /> : null}
-      {tab === "Training" ? <><SavedTrainingBrief refreshKey={briefRefreshKey} enabled={dataState === "live"} disabledStatus={dataState === "sample" ? "sample" : ["missing", "unavailable"].includes(dataState) ? "unavailable" : "loading"} /><TrainingView openHistory={() => setSheet({ type: "training-history", tab: "Training" })} range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /></> : null}
-      <SourceStatus payload={payload} />
+      {tab === "Training" ? <TrainingView onOpenRecovery={() => selectTab("Recovery")} assistantReview={<SavedTrainingBrief refreshKey={briefRefreshKey} enabled={dataState === "live"} disabledStatus={dataState === "sample" ? "sample" : ["missing", "unavailable"].includes(dataState) ? "unavailable" : "loading"} />} openHistory={() => setSheet({ type: "training-history", tab: "Training" })} range={ranges.Training} setRange={setRange} openRecommendation={() => setSheet({ type: "recommendation" })} openExercise={(exercise) => setSheet({ type: "exercise", exercise })} openWorkout={(workout) => setSheet({ type: "workout", workout })} openExerciseList={(exerciseGroups, initialMuscles) => setSheet({ type: "exercise-list", exerciseGroups, initialMuscles, activeMuscles: initialMuscles })} openTimeline={(workouts) => setSheet({ type: "timeline", workouts })} view={view} payload={personalPayload} settings={settings} recovery={dataState === "stale" ? { ...recovery, stale: true, decision: "unknown" } : recovery} dataState={dataState} /> : null}
+      <SourceStatus payload={payload} cacheInfo={loadState.storedAt ? <p className="cache-status">{loadState.status === "live" ? "Source checked" : "Private cached snapshot"} {Math.max(0, Math.floor((now - loadState.storedAt) / 1000))}s ago{loadState.refreshing ? " · refreshing…" : ""}. Measurements keep their own source dates.<button type="button" className="text-button" disabled={loadState.refreshing || syncing} onClick={() => load(activeDays, { force: true }).catch(() => {})}>Refresh view</button></p> : null} />
     </main>
     <BottomNav active={tab} onChange={selectTab} />
     {sheet?.type === "metric-history" ? <MetricHistorySheet metric={sheet.metric} payload={personalPayload} range={ranges[sheet.tab || "Health"]} returnTab={sheet.tab || "Health"} dataState={dataState} onRangeChange={(range) => setRanges((current) => ({ ...current, [sheet.tab || "Health"]: range }))} onClose={() => setSheet(null)} /> : null}
     {sheet?.type === "training-history" ? <TrainingHistorySheet payload={personalPayload} range={ranges[sheet.tab]} dataState={dataState} returnTab={sheet.tab} onRangeChange={(range) => setRanges((current) => ({ ...current, [sheet.tab]: range }))} onClose={() => setSheet(null)} /> : null}
-    {metric ? <BottomSheet title={metric.title} onClose={() => setSheet(null)}><p className="sheet-lead">{metric.body}</p><div className="method-block"><strong>How it’s calculated</strong><p>{metric.method}</p></div><p className="coverage">{view ? `Coverage: ${view.coverage.activity_complete_days || 0} activity days · ${view.coverage.sleep_nights || 0} sleep nights` : "Coverage unavailable"}</p></BottomSheet> : null}
+    {metric ? <BottomSheet title={metric.title} onClose={() => setSheet(null)}><p className="sheet-lead">{metric.body}</p><ContextDetails title="How it’s calculated"><p>{metric.method}</p></ContextDetails><p className="coverage">{view ? `Coverage: ${view.coverage.activity_complete_days || 0} activity days · ${view.coverage.sleep_nights || 0} sleep nights` : "Coverage unavailable"}</p></BottomSheet> : null}
     {sheet?.type === "settings" ? <SettingsMenu settings={settings} notice={sheet.notice} onEdit={(section) => setSheet({ type: "setting", section })} onReset={resetAllSettings} onClose={() => setSheet(null)} /> : null}
     {sheet?.type === "setting" ? <SettingEditor section={sheet.section} settings={settings} onSave={saveSettings} onClose={() => setSheet({ type: "settings" })} openPhotos={() => setSheet({ type: "photos" })} /> : null}
     {sheet?.type === "photos" ? <PhotoSheet onClose={() => setSheet(null)} /> : null}

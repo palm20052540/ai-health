@@ -144,3 +144,7 @@ export function BottomSheet({ title, children, onClose }) {
     {children}
   </section></div>;
 }
+
+export function ContextDetails({ title = "Details", children }) {
+  return <details className="context-details"><summary>{title}</summary><div>{children}</div></details>;
+}
