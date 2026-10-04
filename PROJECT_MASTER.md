@@ -27,6 +27,8 @@ The assistant reads `get_post_workout_input(eventId)`, composes from that specif
 
 ### Release and rollback plan
 
+The applied Supabase migration is `20261004192948_workout_recap_events`; its source filename is aligned with the server-assigned migration history (SQL content unchanged). Backend publication is `hevy-actions` version 26 and `sync-hevy-data` version 7. Native reads of morning, exact-workout thirty-day evidence and the named live routine have succeeded. The pre-workout recovery sub-read initially returned HTTP 500 and succeeded on one bounded retry; no reproducible decoder defect was found. Native callback registration is active, and the first unchanged import after activation produced no historical event. Delivery of an actual future new-workout recap remains a separate live observation, not a fabricated test.
+
 Before release: full tests/lint/SDK checks/native build, read-back review of current deployed functions, source and PROJECT_MASTER synchronization to the original GitHub branch, and owner-private Site publication. Apply the additive migration before the new backend code. Deploy the compatible API first, then importer, then the Site tool proxy. No native post-workout automation is activated until the new tools are discovered and an authenticated read succeeds.
 
 Rollback is non-destructive: stop the new native subscription, restore the prior importer/API/Site versions, and leave private event metadata and source history intact. Disable the new completion trigger if necessary; do not drop data to roll back. No billing, credentials, audience or ingestion-cadence change is included.

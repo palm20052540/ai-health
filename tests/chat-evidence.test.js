@@ -58,7 +58,7 @@ test('real PostgreSQL reader isolates owners, joins by ID, preserves thirty days
       create table public.hevy_sync_state(user_id uuid,resource text,last_success_at timestamptz);
       create table public.health_metrics(user_id uuid,data_type text,recorded_at timestamptz,synced_at timestamptz,value jsonb);
       grant select on all tables in schema public to service_role;`);
-    await db.exec(await readFile(new URL('../supabase/migrations/20261004113317_workout_recap_events.sql',import.meta.url),'utf8'));
+    await db.exec(await readFile(new URL('../supabase/migrations/20261004192948_workout_recap_events.sql',import.meta.url),'utf8'));
     for(const [id,user,at] of [['today',USER,AT],['boundary',USER,'2026-09-04T10:00:00Z'],['outside',USER,'2026-09-04T09:59:59Z'],['later',USER,'2026-10-05T10:00:00Z'],['other-owner',OTHER,AT]]) {
       await db.query('insert into hevy_workouts(id,user_id,title,start_time,end_time) values($1,$2,$3,$4,$4::timestamptz+interval \'1 hour\')',[id,user,'Synthetic session',at]);
       await db.query('insert into hevy_workout_exercises(workout_id,user_id,exercise_index,exercise_template_id,title) values($1,$2,0,\'press\',\'Synthetic press\')',[id,user]);

@@ -17,7 +17,7 @@ async function database(){
     create table hevy_sync_state(user_id uuid,resource text,last_success_at timestamptz);
     create table health_metrics(user_id uuid,data_type text,recorded_at timestamptz,synced_at timestamptz,value jsonb);
     grant select,insert,update,delete on all tables in schema public to service_role;`);
-  await db.exec(await readFile(new URL('../supabase/migrations/20261004113317_workout_recap_events.sql',import.meta.url),'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/20261004192948_workout_recap_events.sql',import.meta.url),'utf8'));
   await db.exec('set role service_role');
   await db.query(`insert into hevy_chat_subscriptions(id,user_id,site_owner_id,callback_url,signing_secret,verified_at,activated_at,expires_at)
     values('sub_synthetic',$1,'owner','https://callback.example.test','synthetic-not-a-real-secret',now(),now()-interval '2 hours',now()+interval '1 day')`,[USER]);
