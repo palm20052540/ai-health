@@ -479,3 +479,16 @@ button:disabled { cursor: wait; opacity: .6; }
 .assistant-sync-status p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .training-mode .saved-training-brief { margin: 10px 0 18px; }
 @media (max-width: 360px) { .saved-assistant-brief { padding: 13px; } .saved-assistant-brief .section-title-row { gap: 8px; } }
+
+/* Source-backed metric history; preserve the existing compact Health surface. */
+.metric-history .sheet-lead { font-size: 1rem; }
+.metric-history .range-control { margin: 16px 0; }
+.history-coverage { color: var(--muted); font-size: .875rem; line-height: 1.5; margin: 12px 0; }
+.history-records { margin: 12px 0 20px; padding: 0; list-style: none; }
+.history-record { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, auto); gap: 12px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.history-record time, .history-record > div > span { display: block; font-size: .9375rem; font-weight: 650; }
+.history-record small { display: block; font-size: .875rem; color: var(--muted); line-height: 1.45; margin-top: 5px; }
+.history-record strong { font-size: 1rem; text-align: right; overflow-wrap: anywhere; }
+.history-record .history-missing { color: var(--muted); font-size: .875rem; font-weight: 500; }
+.metric-history .secondary-button { font-size: .9375rem; }
+@media (max-width: 350px) { .history-record { grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; } }

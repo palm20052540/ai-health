@@ -122,7 +122,7 @@ export function buildLiveView(payload, settings) {
     health: {
       evidence: [
         { label: "Steps", value: formatNumber(activity.steps?.average), delta: percentFromAverage(activity.steps?.latest, activity.steps?.average) },
-        { label: "Resting HR", value: recovery.resting_heart_rate_bpm?.latest == null ? "—" : `${formatNumber(recovery.resting_heart_rate_bpm.latest, 1)} bpm`, delta: "latest", metric: "HRV" },
+        { label: "Resting HR", value: recovery.resting_heart_rate_bpm?.latest == null ? "—" : `${formatNumber(recovery.resting_heart_rate_bpm.latest, 1)} bpm`, delta: "latest", metric: "Resting heart rate" },
         { label: "Weight", value: latestWeight == null ? "—" : `${formatNumber(latestWeight, 1)} kg`, delta: weights.length > 1 ? `${formatNumber(latestWeight - weights.at(-1).weight_kg, 1)} kg` : "latest" },
       ],
       chart: {
